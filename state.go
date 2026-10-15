@@ -1,0 +1,92 @@
+package main
+
+import (
+	"encoding/json"
+	"errors"
+	"os"
+	"path/filepath"
+)
+
+// Node is one upstream the user adds; it maps to a core outbound. Only one
+// node is active at a time and becomes the default (empty-tag) outbound.
+type Node struct {
+	Name      string `json:"name"`
+	Protocol  string `json:"protocol"` // btp, vless, trojan, socks
+	Server    string `json:"server"`
+	Port      string `json:"port"`
+	Secret    string `json:"secret"` // uuid / password; socks ignores it
+	Transport string `json:"transport"`
+	Path      string `json:"path"`      // xhttp request path
+	Authority string `json:"authority"` // SNI / Host, defaults to Server
+	TLS       bool   `json:"tls"`       // xhttp only: https vs http
+	Padding   string `json:"padding"`   // xhttp X-Padding range
+}
+
+// GUIState is everything persisted between runs. The two local inbounds are
+// fixed (socks + http); the user only picks their ports.
+type GUIState struct {
+	SocksPort   string `json:"socks_port"`
+	HttpPort    string `json:"http_port"`
+	Nodes       []Node `json:"nodes"`
+	Active      int    `json:"active"` // index into Nodes; -1 = none
+	SystemProxy bool   `json:"system_proxy"`
+}
+
+func defaultState() GUIState {
+	return GUIState{SocksPort: "10808", HttpPort: "10809", Active: -1}
+}
+
+// activeNode returns the selected node, or an error if none is selected.
+func (s GUIState) activeNode() (Node, error) {
+	if s.Active < 0 || s.Active >= len(s.Nodes) {
+		return Node{}, errors.New("no active node selected")
+	}
+	return s.Nodes[s.Active], nil
+}
+
+type store struct{ path string }
+
+func newStore(dir string) *store {
+	return &store{path: filepath.Join(dir, "state.json")}
+}
+
+// appConfigDir is where GUI state persists, independent of fyne's storage so a
+// plain Go build (and CI smoke test) can locate it without a running app.
+func appConfigDir() (string, error) {
+	base, err := os.UserConfigDir()
+	if err != nil {
+		return "", err
+	}
+	dir := filepath.Join(base, "bad-proxy-gui")
+	return dir, os.MkdirAll(dir, 0o700)
+}
+
+func (st *store) load() GUIState {
+	s := defaultState()
+	b, err := os.ReadFile(st.path)
+	if err != nil {
+		return s
+	}
+	_ = json.Unmarshal(b, &s)
+	if s.SocksPort == "" {
+		s.SocksPort = "10808"
+	}
+	if s.HttpPort == "" {
+		s.HttpPort = "10809"
+	}
+	if s.Active >= len(s.Nodes) {
+		s.Active = -1
+	}
+	return s
+}
+
+func (st *store) save(s GUIState) error {
+	if err := os.MkdirAll(filepath.Dir(st.path), 0o700); err != nil {
+		return err
+	}
+	b, err := json.MarshalIndent(s, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(st.path, b, 0o600)
+}

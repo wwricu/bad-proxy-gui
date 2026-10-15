@@ -1,0 +1,76 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout bad-proxy-core (embedded engine)
+        uses: actions/checkout@v4
+        with:
+          repository: wwricu/bad-proxy-core
+          path: bad-proxy-core
+          ref: dev
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install MinGW-w64 (gcc for Fyne CGO)
+        run: choco install mingw -y
+      - name: Point core replace at the in-workspace checkout
+        run: go mod edit -replace github.com/wwricu/bad-proxy-core=./bad-proxy-core
+      - name: Build exe
+        shell: pwsh
+        env:
+          CGO_ENABLED: "1"
+        run: |
+          go env -w CGO_ENABLED=1
+          mkdir build
+          go build -trimpath -ldflags "-s -w -H windowsgui" -o build/bad-proxy-gui.exe .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bad-proxy-gui-windows
+          path: build/bad-proxy-gui.exe
+
+  macos:
+    # Best-effort until a real Mac is available to validate packaging;
+    # a failure here must not redden the Windows-first pipeline.
+    continue-on-error: true
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout bad-proxy-core (embedded engine)
+        uses: actions/checkout@v4
+        with:
+          repository: wwricu/bad-proxy-core
+          path: bad-proxy-core
+          ref: dev
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Point core replace at the in-workspace checkout
+        run: go mod edit -replace github.com/wwricu/bad-proxy-core=./bad-proxy-core
+      - name: Build (verify it compiles on darwin)
+        env:
+          CGO_ENABLED: "1"
+        run: go build -o build/bad-proxy-gui .
+      - name: Install fyne CLI
+        run: go install fyne.io/tools/cmd/fyne@latest
+      - name: Package .app
+        run: |
+          fyne package -os darwin -release
+          mv Bad\ Proxy.app build/ 2>/dev/null || true
+      - name: Zip app bundle
+        run: cd build && zip -r -y bad-proxy-gui-macos.zip Bad\ Proxy.app
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bad-proxy-gui-macos
+          path: build/bad-proxy-gui-macos.zip

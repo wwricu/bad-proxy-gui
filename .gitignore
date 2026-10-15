@@ -1,0 +1,16 @@
+# build output
+build/
+dist/
+*.exe
+*.app
+*.dylib
+
+# local settings / profiles (may hold secrets — never commit)
+*.local.json
+settings.json
+profiles.json
+
+# editor / OS
+.idea/
+.vscode/
+.DS_Store
