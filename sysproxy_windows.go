@@ -11,6 +11,9 @@ import (
 
 const internetSettingsKey = `Software\Microsoft\Windows\CurrentVersion\Internet Settings`
 
+// systemProxySupported reports that this platform can toggle the OS proxy.
+const systemProxySupported = true
+
 var (
 	wininet            = windows.NewLazySystemDLL("wininet.dll")
 	internetSetOptionW = wininet.NewProc("InternetSetOptionW")

@@ -1,13 +1,14 @@
-//go:build !windows
+//go:build !windows && !darwin
 
 package main
 
 import "errors"
 
-// applySystemProxy is not implemented for macOS/Linux yet. On macOS this will
-// shell out to `networksetup -setwebproxy/-setsocksfirewallproxy` once a Mac is
-// available to verify the service name detection; until then it refuses so the
-// checkbox does not silently no-op.
+// systemProxySupported is false on Linux/BSD: the toggle is hidden so the UI
+// never offers a control that cannot take effect.
+const systemProxySupported = false
+
+// applySystemProxy is not implemented for this platform.
 func applySystemProxy(bool, GUIState) error {
-	return errors.New("system proxy toggle is Windows-only for now")
+	return errors.New("system proxy toggle is not supported on this platform")
 }

@@ -59,9 +59,9 @@ func (c *controller) buildUI() {
 	title.Importance = widget.HighImportance
 	title.TextStyle = fyne.TextStyle{Bold: true}
 	c.statusText = widget.NewLabel("")
+	c.statusText.Importance = widget.LowImportance
 	header := container.NewHBox(
-		container.NewGridWrap(fyne.NewSize(14, 14), c.statusDot),
-		widget.NewLabel("  "),
+		container.NewGridWrap(fyne.NewSize(12, 12), c.statusDot),
 		title,
 		layout.NewSpacer(),
 		c.statusText,
@@ -130,22 +130,23 @@ func (c *controller) buildUI() {
 		widget.NewFormItem("SOCKS", c.socksPort),
 		widget.NewFormItem("HTTP", c.httpPort),
 	)
-	control := container.NewVBox(
-		c.primary,
-		c.testBtn,
+	controlChildren := []fyne.CanvasObject{
+		container.NewGridWithColumns(2, c.primary, c.testBtn),
 		widget.NewSeparator(),
 		portForm,
-		widget.NewSeparator(),
-		c.sysProxy,
-	)
+	}
+	if systemProxySupported {
+		controlChildren = append(controlChildren, widget.NewSeparator(), c.sysProxy)
+	}
+	control := container.NewVBox(controlChildren...)
 	controlCard := widget.NewCard("", "", control)
 
 	body := container.NewHSplit(nodesCard, controlCard)
-	body.Offset = 0.55
+	body.Offset = 0.6
 
-	c.win.SetContent(container.NewBorder(header, nil, nil, nil,
-		container.NewPadded(body)))
-	c.win.Resize(fyne.NewSize(860, 560))
+	c.win.SetContent(container.NewPadded(
+		container.NewBorder(header, nil, nil, nil, body)))
+	c.win.Resize(fyne.NewSize(720, 440))
 }
 
 func (c *controller) setupTray() {

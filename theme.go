@@ -7,19 +7,19 @@ import (
 	"fyne.io/fyne/v2/theme"
 )
 
-// brand palette: deep navy surfaces, sky accent. Chosen for a calm, professional
-// desktop-tool feel rather than Fyne's default flat white.
+// Neutral charcoal palette with a single desaturated steel-blue accent.
+// Deliberately low-chroma and dense so it reads as a serious desktop tool.
 var (
-	colBG        = color.NRGBA{0x0f, 0x14, 0x20, 0xff}
-	colSurface   = color.NRGBA{0x16, 0x20, 0x2e, 0xff}
-	colSurfaceHi = color.NRGBA{0x1c, 0x28, 0x38, 0xff}
-	colBorder    = color.NRGBA{0x2a, 0x3b, 0x52, 0xff}
-	colFG        = color.NRGBA{0xe6, 0xea, 0xf2, 0xff}
-	colMuted     = color.NRGBA{0x8a, 0x99, 0xb0, 0xff}
-	colAccent    = color.NRGBA{0x38, 0xbd, 0xf8, 0xff}
-	colAccentTxt = color.NRGBA{0x06, 0x11, 0x1c, 0xff}
-	colOK        = color.NRGBA{0x34, 0xd3, 0x99, 0xff}
-	colErr       = color.NRGBA{0xf8, 0x71, 0x71, 0xff}
+	colBG        = color.NRGBA{0x14, 0x16, 0x1a, 0xff}
+	colSurface   = color.NRGBA{0x1d, 0x20, 0x25, 0xff}
+	colSurfaceHi = color.NRGBA{0x26, 0x2a, 0x30, 0xff}
+	colBorder    = color.NRGBA{0x33, 0x38, 0x40, 0xff}
+	colFG        = color.NRGBA{0xcf, 0xd3, 0xda, 0xff}
+	colMuted     = color.NRGBA{0x76, 0x7d, 0x88, 0xff}
+	colAccent    = color.NRGBA{0x4f, 0x7c, 0xac, 0xff}
+	colAccentTxt = color.NRGBA{0xee, 0xf2, 0xf7, 0xff}
+	colOK        = color.NRGBA{0x55, 0x93, 0x6f, 0xff}
+	colErr       = color.NRGBA{0xb5, 0x60, 0x5f, 0xff}
 )
 
 type appTheme struct{ fyne.Theme }
@@ -35,7 +35,7 @@ func (t *appTheme) Color(name fyne.ThemeColorName, variant fyne.ThemeVariant) co
 	case theme.ColorNamePrimary, theme.ColorNameHyperlink, theme.ColorNameFocus:
 		return colAccent
 	case theme.ColorNameSelection:
-		return color.NRGBA{0x38, 0xbd, 0xf8, 0x33}
+		return color.NRGBA{0x4f, 0x7c, 0xac, 0x40}
 	case theme.ColorNameHeaderBackground:
 		return colSurface
 	case theme.ColorNameButton:
@@ -68,15 +68,17 @@ func (t *appTheme) Color(name fyne.ThemeColorName, variant fyne.ThemeVariant) co
 func (t *appTheme) Size(name fyne.ThemeSizeName) float32 {
 	switch name {
 	case theme.SizeNamePadding:
-		return 10
+		return 5
 	case theme.SizeNameInputRadius, theme.SizeNameSelectionRadius:
-		return 8
+		return 5
 	case theme.SizeNameScrollBar:
-		return 8
+		return 6
 	case theme.SizeNameText:
-		return 14
+		return 13
 	case theme.SizeNameHeadingText:
-		return 20
+		return 15
+	case theme.SizeNameCaptionText:
+		return 11
 	default:
 		return t.Theme.Size(name)
 	}

@@ -4,5 +4,5 @@ ID = "icu.wwr.badproxy.gui"
 Author = "wwricu"
 Homepage = "https://github.com/wwricu/bad-proxy-gui"
 Description = "Cross-platform desktop client for bad-proxy-core"
-Version = "0.1.2"
-Build = 3
+Version = "0.0.1-beta-1"
+Build = 1

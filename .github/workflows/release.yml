@@ -40,8 +40,8 @@ jobs:
           if-no-files-found: error
 
   build-macos:
-    # Best-effort until a real Mac validates packaging; must not block the release.
-    continue-on-error: true
+    # Universal (arm64 + x86_64) .app bundle, ad-hoc signed so it launches on
+    # the downloader's Mac after they clear the quarantine flag.
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -56,19 +56,47 @@ jobs:
           go-version-file: go.mod
       - name: Point core replace at the in-workspace checkout
         run: go mod edit -replace github.com/wwricu/bad-proxy-core=./bad-proxy-core
-      - name: Install fyne CLI
-        run: go install fyne.io/tools/cmd/fyne@latest
-      - name: Package .app
+      - name: Build universal binary
+        env:
+          CGO_ENABLED: "1"
         run: |
           mkdir -p build
-          fyne package -os darwin -release
-          mv Bad\ Proxy.app build/bad-proxy-gui.app
-      - name: Zip app bundle
-        run: cd build && zip -r -y bad-proxy-gui-darwin-universal.zip bad-proxy-gui.app
+          GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags "-s -w" -o build/bad-proxy-gui-arm64 .
+          GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o build/bad-proxy-gui-amd64 .
+          lipo -create -output build/bad-proxy-gui-universal build/bad-proxy-gui-arm64 build/bad-proxy-gui-amd64
+          lipo -info build/bad-proxy-gui-universal
+      - name: Assemble .app bundle
+        run: |
+          APP="build/Bad Proxy.app"
+          mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+          cp build/bad-proxy-gui-universal "$APP/Contents/MacOS/bad-proxy-gui"
+          cat > "$APP/Contents/Info.plist" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleName</key><string>Bad Proxy</string>
+            <key>CFBundleDisplayName</key><string>Bad Proxy</string>
+            <key>CFBundleExecutable</key><string>bad-proxy-gui</string>
+            <key>CFBundleIdentifier</key><string>icu.wwr.badproxy.gui</string>
+            <key>CFBundlePackageType</key><string>APPL</string>
+            <key>CFBundleVersion</key><string>0.0.1-beta-1</string>
+            <key>CFBundleShortVersionString</key><string>0.0.1-beta-1</string>
+            <key>LSMinimumSystemVersion</key><string>11.0</string>
+            <key>NSHighResolutionCapable</key><true/>
+            <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
+          </dict>
+          </plist>
+          PLIST
+      - name: Ad-hoc codesign
+        run: codesign --force --deep -s - "build/Bad Proxy.app"
+      - name: Zip bundle
+        run: cd build && ditto -c -k --sequesterRsrc "Bad Proxy.app" bad-proxy-gui-darwin-universal.zip
       - uses: actions/upload-artifact@v4
         with:
           name: macos
           path: build/bad-proxy-gui-darwin-universal.zip
+          if-no-files-found: error
 
   release:
     needs: [build-windows, build-macos]
