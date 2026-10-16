@@ -56,6 +56,9 @@ func main() {
 	c.state = c.store.load()
 	c.buildUI()
 	c.setupTray()
+	// Start as a foreground app (Dock icon + activated) so the initial window
+	// surfaces normally; closing hides to the menu-bar item (becomes accessory).
+	becomeForeground()
 	c.setStatus("Not connected", colMuted)
 	go c.watchReopen(lock)
 	c.win.ShowAndRun()
@@ -75,8 +78,18 @@ func (c *controller) watchReopen(ln net.Listener) {
 }
 
 func (c *controller) showWindow() {
+	// On macOS bring the app to the foreground (and restore the Dock icon) so the
+	// window actually surfaces; a no-op on Windows.
+	becomeForeground()
 	c.win.Show()
 	c.win.RequestFocus()
+}
+
+// hideToTray hides the window (proxy keeps running) and, on macOS, drops back to
+// an accessory app with no Dock icon.
+func (c *controller) hideToTray() {
+	c.win.Hide()
+	becomeBackground()
 }
 
 func (c *controller) buildUI() {
@@ -187,10 +200,10 @@ func (c *controller) buildUI() {
 		container.NewBorder(header, nil, nil, nil, body)))
 	c.win.Resize(fyne.NewSize(720, 440))
 	// Platform-specific: on macOS/Windows closing hides to the tray so the proxy
-	// keeps running (and the tray Open item restores the window); elsewhere the
+	// keeps running (macOS also drops to accessory / no Dock icon); elsewhere the
 	// close falls through to Fyne's default quit.
 	if hideOnCloseToTray {
-		c.win.SetCloseIntercept(func() { c.win.Hide() })
+		c.win.SetCloseIntercept(c.hideToTray)
 	}
 }
 
@@ -208,8 +221,12 @@ func (c *controller) setupTray() {
 	if !ok {
 		return
 	}
-	// Left-tapping the icon re-shows the window (Windows + macOS, Fyne 2.7+).
-	da.SetSystemTrayWindow(c.win)
+	// On Windows let the tray icon left-tap re-show the window (works there).
+	// Skip it on macOS: Fyne's built-in show doesn't activate the accessory app
+	// and it would override our close-intercept, so we reopen via the Open item.
+	if trayUsesNativeClickOpen {
+		da.SetSystemTrayWindow(c.win)
+	}
 	var items []*fyne.MenuItem
 	if trayOpenMenuItem {
 		items = append(items, fyne.NewMenuItem("Open Bad Proxy", c.showWindow))

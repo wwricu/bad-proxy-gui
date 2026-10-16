@@ -12,3 +12,4 @@ const hasTray = false
 const trayCanHide = false
 const trayOpenMenuItem = false
 const trayQuitMenuItem = false
+const trayUsesNativeClickOpen = false

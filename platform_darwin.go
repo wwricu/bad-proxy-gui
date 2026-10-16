@@ -18,3 +18,8 @@ const trayCanHide = false
 // macOS status items act through a menu, so the icon carries Open + Quit.
 const trayOpenMenuItem = true
 const trayQuitMenuItem = true
+
+// trayUsesNativeClickOpen is false on macOS: Fyne's SetSystemTrayWindow shows the
+// window without activating the (accessory) app, so it can open behind everything.
+// We reopen via the menu's Open item, which runs our own activating showWindow.
+const trayUsesNativeClickOpen = false

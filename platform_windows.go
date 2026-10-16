@@ -17,3 +17,7 @@ const trayCanHide = true
 // needs a right-click Quit; no "Open" item.
 const trayOpenMenuItem = false
 const trayQuitMenuItem = true
+
+// trayUsesNativeClickOpen is true on Windows: Fyne's SetSystemTrayWindow makes a
+// left-click re-show the window, which works correctly there.
+const trayUsesNativeClickOpen = true
