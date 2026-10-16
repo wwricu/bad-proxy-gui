@@ -44,6 +44,19 @@ func (s GUIState) activeNode() (Node, error) {
 	return s.Nodes[s.Active], nil
 }
 
+// normalize enforces the "always a default node" invariant: whenever at least
+// one node exists, Active points at a valid one (first node if unset/out of
+// range). With zero nodes it resets Active to -1.
+func (s *GUIState) normalize() {
+	if len(s.Nodes) == 0 {
+		s.Active = -1
+		return
+	}
+	if s.Active < 0 || s.Active >= len(s.Nodes) {
+		s.Active = 0
+	}
+}
+
 type store struct{ path string }
 
 func newStore(dir string) *store {
@@ -74,9 +87,7 @@ func (st *store) load() GUIState {
 	if s.HttpPort == "" {
 		s.HttpPort = "10809"
 	}
-	if s.Active >= len(s.Nodes) {
-		s.Active = -1
-	}
+	s.normalize()
 	return s
 }
 

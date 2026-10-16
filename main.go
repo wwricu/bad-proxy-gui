@@ -147,10 +147,12 @@ func (c *controller) buildUI() {
 	c.win.SetContent(container.NewPadded(
 		container.NewBorder(header, nil, nil, nil, body)))
 	c.win.Resize(fyne.NewSize(720, 440))
-	// Closing hides to the tray so the proxy keeps running; the tray Open item
-	// restores it. Without this Fyne *closes* the window, and Show() on a closed
-	// window is a no-op (the bug where tray "Show" did nothing).
-	c.win.SetCloseIntercept(func() { c.win.Hide() })
+	// Platform-specific: on macOS/Windows closing hides to the tray so the proxy
+	// keeps running (and the tray Open item restores the window); elsewhere the
+	// close falls through to Fyne's default quit.
+	if hideOnCloseToTray {
+		c.win.SetCloseIntercept(func() { c.win.Hide() })
+	}
 }
 
 func (c *controller) setupTray() {
@@ -234,9 +236,12 @@ func (c *controller) onDeleteNode() {
 		c.disconnect()
 	}
 	c.state.Nodes = removeNode(c.state.Nodes, node.Name)
-	c.state.Active = -1
+	c.state.normalize()
 	c.nodeList.UnselectAll()
 	c.nodeList.Refresh()
+	if c.state.Active >= 0 {
+		c.nodeList.Select(c.state.Active)
+	}
 	c.persist()
 }
 
