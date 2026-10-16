@@ -1,8 +1,14 @@
 package main
 
 import (
+	"fmt"
 	"strconv"
 )
+
+// nodeDetail is the secondary line under a node's name in the list.
+func nodeDetail(n Node) string {
+	return fmt.Sprintf("%s · %s:%s · %s", n.Protocol, n.Server, n.Port, n.Transport)
+}
 
 func nodeNames(nodes []Node) []string {
 	names := make([]string, 0, len(nodes))
