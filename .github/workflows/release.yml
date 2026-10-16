@@ -1,0 +1,87 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout bad-proxy-core (embedded engine)
+        uses: actions/checkout@v4
+        with:
+          repository: wwricu/bad-proxy-core
+          path: bad-proxy-core
+          ref: dev
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install MinGW-w64 (gcc for Fyne CGO)
+        run: choco install mingw -y
+      - name: Point core replace at the in-workspace checkout
+        run: go mod edit -replace github.com/wwricu/bad-proxy-core=./bad-proxy-core
+      - name: Build exe
+        shell: pwsh
+        env:
+          CGO_ENABLED: "1"
+        run: |
+          go env -w CGO_ENABLED=1
+          mkdir build
+          go build -trimpath -ldflags "-s -w -H windowsgui" -o build/bad-proxy-gui-windows-amd64.exe .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: build/bad-proxy-gui-windows-amd64.exe
+          if-no-files-found: error
+
+  build-macos:
+    # Best-effort until a real Mac validates packaging; must not block the release.
+    continue-on-error: true
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout bad-proxy-core (embedded engine)
+        uses: actions/checkout@v4
+        with:
+          repository: wwricu/bad-proxy-core
+          path: bad-proxy-core
+          ref: dev
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Point core replace at the in-workspace checkout
+        run: go mod edit -replace github.com/wwricu/bad-proxy-core=./bad-proxy-core
+      - name: Install fyne CLI
+        run: go install fyne.io/tools/cmd/fyne@latest
+      - name: Package .app
+        run: |
+          mkdir -p build
+          fyne package -os darwin -release
+          mv Bad\ Proxy.app build/bad-proxy-gui.app
+      - name: Zip app bundle
+        run: cd build && zip -r -y bad-proxy-gui-darwin-universal.zip bad-proxy-gui.app
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: build/bad-proxy-gui-darwin-universal.zip
+
+  release:
+    needs: [build-windows, build-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          prerelease: true
+          generate_release_notes: true
+          fail_on_unmatched_files: false
