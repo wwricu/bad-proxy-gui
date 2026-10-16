@@ -127,7 +127,7 @@ func (c *controller) buildUI() {
 	}
 
 	addBtn := widget.NewButtonWithIcon("Add", theme.ContentAddIcon(), func() { c.openNodeForm(nil) })
-	editBtn := widget.NewButtonWithIcon("Edit", theme.DocumentSaveIcon(), func() {
+	editBtn := widget.NewButton("Edit", func() {
 		if n, ok := c.selectedNode(); ok {
 			c.openNodeForm(&n)
 		}
@@ -202,6 +202,9 @@ func (c *controller) setupTray() {
 	if !ok {
 		return
 	}
+	// Left-tapping the tray / menu-bar icon re-shows the window (Windows + macOS,
+	// Fyne 2.7+), so a window hidden by close-intercept is always reachable.
+	da.SetSystemTrayWindow(c.win)
 	show := fyne.NewMenuItem("Open Bad Proxy", c.showWindow)
 	quit := fyne.NewMenuItem("Quit", func() { c.shutdown() })
 	da.SetSystemTrayMenu(fyne.NewMenu("", show, fyne.NewMenuItemSeparator(), quit))
@@ -287,7 +290,10 @@ func (c *controller) onDeleteNode() {
 	c.persist()
 }
 
-// openNodeForm shows the add/edit dialog. edit is nil for a new node.
+// openNodeForm shows the add/edit dialog. edit is nil for a new node. The form
+// only renders the fields the core engine actually reads for the current
+// protocol+transport, so changing either rebuilds the dialog (the same widget
+// instances are reused, so typed values survive).
 func (c *controller) openNodeForm(edit *Node) {
 	proto := widget.NewSelect([]string{"btp", "vless", "trojan", "socks"}, nil)
 	transport := widget.NewSelect([]string{"tcp", "tls", "xhttp"}, nil)
@@ -316,27 +322,30 @@ func (c *controller) openNodeForm(edit *Node) {
 		transport.SetSelected("xhttp")
 	}
 
-	items := []*widget.FormItem{
-		widget.NewFormItem("Name", name),
-		widget.NewFormItem("Protocol", proto),
-		widget.NewFormItem("Server", server),
-		widget.NewFormItem("Port", port),
-		widget.NewFormItem("Secret/UUID", secret),
-		widget.NewFormItem("Transport", transport),
-		widget.NewFormItem("Path", path),
-		widget.NewFormItem("Authority/SNI", authority),
-		widget.NewFormItem("Padding", padding),
-		widget.NewFormItem("HTTPS", tls),
-	}
-
-	d := dialog.NewForm("Node", "Save", "Cancel", items, func(ok bool) {
+	// save is shared by every rebuild; it reads from the persistent widgets.
+	save := func(ok bool) {
 		if !ok {
 			return
 		}
+		f := visibleNodeFields(proto.Selected, transport.Selected)
 		n := Node{
 			Name: name.Text, Protocol: proto.Selected, Server: server.Text, Port: port.Text,
-			Secret: secret.Text, Transport: transport.Selected, Path: path.Text,
-			Authority: authority.Text, TLS: tls.Checked, Padding: padding.Text,
+			Transport: transport.Selected,
+		}
+		if f.Secret {
+			n.Secret = secret.Text
+		}
+		if f.Authority {
+			n.Authority = authority.Text
+		}
+		if f.Path {
+			n.Path = path.Text
+		}
+		if f.Padding {
+			n.Padding = padding.Text
+		}
+		if f.HTTPS {
+			n.TLS = tls.Checked
 		}
 		if n.Name == "" || n.Server == "" || n.Port == "" {
 			dialog.ShowError(fmt.Errorf("name, server and port are required"), c.win)
@@ -353,9 +362,58 @@ func (c *controller) openNodeForm(edit *Node) {
 			c.nodeList.Select(c.state.Active)
 		}
 		c.persist()
-	}, c.win)
-	d.Resize(fyne.NewSize(440, 520))
-	d.Show()
+	}
+
+	var current *dialog.FormDialog
+	ready := false
+
+	build := func() {
+		if current != nil {
+			current.Hide()
+		}
+		f := visibleNodeFields(proto.Selected, transport.Selected)
+		items := []*widget.FormItem{
+			widget.NewFormItem("Name", name),
+			widget.NewFormItem("Protocol", proto),
+			widget.NewFormItem("Server", server),
+			widget.NewFormItem("Port", port),
+		}
+		if f.Secret {
+			items = append(items, widget.NewFormItem("Secret/UUID", secret))
+		}
+		items = append(items, widget.NewFormItem("Transport", transport))
+		if f.Authority {
+			items = append(items, widget.NewFormItem("Authority/SNI", authority))
+		}
+		if f.Path {
+			items = append(items, widget.NewFormItem("Path", path))
+		}
+		if f.Padding {
+			items = append(items, widget.NewFormItem("Padding", padding))
+		}
+		if f.HTTPS {
+			items = append(items, widget.NewFormItem("HTTPS", tls))
+		}
+		current = dialog.NewForm("Node", "Save", "Cancel", items, save, c.win)
+		current.Resize(fyne.NewSize(440, 520))
+		current.Show()
+	}
+
+	build()
+	// Changing protocol or transport rebuilds the visible field set. Attach the
+	// handlers only after the first show so the initial SetSelected above does
+	// not trigger a rebuild.
+	proto.OnChanged = func(string) {
+		if ready {
+			build()
+		}
+	}
+	transport.OnChanged = func(string) {
+		if ready {
+			build()
+		}
+	}
+	ready = true
 }
 
 func (c *controller) applyPorts() bool {

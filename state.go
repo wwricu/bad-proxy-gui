@@ -45,6 +45,30 @@ func (s GUIState) activeNode() (Node, error) {
 	return s.Nodes[s.Active], nil
 }
 
+// nodeFields says which optional node form fields are meaningful for a given
+// protocol+transport. It mirrors exactly what the core engine reads:
+//   - secret   -> used by btp/vless/trojan; the socks handshake ignores it.
+//   - tls      -> SNI (authority) only; no path/padding/https (TLS is implied).
+//   - xhttp    -> path, authority (Host), padding range, and the https toggle.
+//   - tcp      -> raw stream; nothing beyond host/port.
+type nodeFields struct {
+	Secret, Authority, Path, Padding, HTTPS bool
+}
+
+func visibleNodeFields(protocol, transport string) nodeFields {
+	f := nodeFields{Secret: protocol != "socks"}
+	switch transport {
+	case "tls":
+		f.Authority = true
+	case "xhttp":
+		f.Authority = true
+		f.Path = true
+		f.Padding = true
+		f.HTTPS = true
+	}
+	return f
+}
+
 // normalize enforces the "always a default node" invariant: whenever at least
 // one node exists, Active points at a valid one (first node if unset/out of
 // range). With zero nodes it resets Active to -1.

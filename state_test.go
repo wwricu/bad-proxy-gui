@@ -23,3 +23,25 @@ func TestNormalizeDefaultNode(t *testing.T) {
 		})
 	}
 }
+
+func TestVisibleNodeFields(t *testing.T) {
+	cases := []struct {
+		proto, transport string
+		want             nodeFields
+	}{
+		{"vless", "tcp", nodeFields{Secret: true}},
+		{"vless", "tls", nodeFields{Secret: true, Authority: true}},
+		{"vless", "xhttp", nodeFields{Secret: true, Authority: true, Path: true, Padding: true, HTTPS: true}},
+		{"trojan", "xhttp", nodeFields{Secret: true, Authority: true, Path: true, Padding: true, HTTPS: true}},
+		{"btp", "tls", nodeFields{Secret: true, Authority: true}},
+		{"socks", "xhttp", nodeFields{Authority: true, Path: true, Padding: true, HTTPS: true}},
+		{"socks", "tcp", nodeFields{}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.proto+"/"+tc.transport, func(t *testing.T) {
+			if got := visibleNodeFields(tc.proto, tc.transport); got != tc.want {
+				t.Fatalf("visibleNodeFields(%q,%q) = %+v, want %+v", tc.proto, tc.transport, got, tc.want)
+			}
+		})
+	}
+}
