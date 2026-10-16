@@ -83,7 +83,7 @@ jobs:
             '<key>NSHighResolutionCapable</key><true/>' \
             '</dict></plist>' > "$APP/Contents/Info.plist"
           codesign --force --deep -s - "$APP"
-          cd build && ditto -c -k --sequesterRsrc "Bad Proxy.app" bad-proxy-gui-macos.zip
+          cd build && ditto -c -k --keepParent --sequesterRsrc "Bad Proxy.app" bad-proxy-gui-macos.zip
       - uses: actions/upload-artifact@v4
         with:
           name: bad-proxy-gui-macos

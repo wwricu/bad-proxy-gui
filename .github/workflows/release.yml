@@ -91,7 +91,7 @@ jobs:
       - name: Ad-hoc codesign
         run: codesign --force --deep -s - "build/Bad Proxy.app"
       - name: Zip bundle
-        run: cd build && ditto -c -k --sequesterRsrc "Bad Proxy.app" bad-proxy-gui-darwin-universal.zip
+        run: cd build && ditto -c -k --keepParent --sequesterRsrc "Bad Proxy.app" bad-proxy-gui-darwin-universal.zip
       - uses: actions/upload-artifact@v4
         with:
           name: macos
