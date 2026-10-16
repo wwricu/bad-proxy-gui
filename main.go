@@ -9,11 +9,9 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
-	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/driver/desktop"
-	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 )
@@ -25,7 +23,6 @@ type controller struct {
 	eng     engine
 	state   GUIState
 
-	statusDot  *canvas.Circle
 	statusText *widget.Label
 	nodeList   *widget.List
 	primary    *widget.Button
@@ -93,21 +90,10 @@ func (c *controller) hideToTray() {
 }
 
 func (c *controller) buildUI() {
-	// header: brand dot + title + live status
-	c.statusDot = canvas.NewCircle(colMuted)
-	c.statusDot.StrokeColor = colBorder
-	c.statusDot.StrokeWidth = 1
-	title := widget.NewLabel("Bad Proxy")
-	title.Importance = widget.HighImportance
-	title.TextStyle = fyne.TextStyle{Bold: true}
+	// header: live status text only (brand dot & title removed)
 	c.statusText = widget.NewLabel("")
 	c.statusText.Importance = widget.LowImportance
-	header := container.NewHBox(
-		container.NewGridWrap(fyne.NewSize(12, 12), c.statusDot),
-		title,
-		layout.NewSpacer(),
-		c.statusText,
-	)
+	header := container.NewHBox(c.statusText)
 
 	// node list — each row carries its own Edit / Delete actions
 	c.nodeList = widget.NewList(
@@ -153,10 +139,9 @@ func (c *controller) buildUI() {
 		c.nodeList.Select(c.state.Active)
 	}
 
-	addBtn := widget.NewButtonWithIcon("Add", theme.ContentAddIcon(), func() { c.openNodeForm(nil) })
+	addBtn := widget.NewButtonWithIcon("Add node", theme.ContentAddIcon(), func() { c.openNodeForm(nil) })
 	addBtn.Importance = widget.HighImportance
-	addBar := container.NewHBox(layout.NewSpacer(), addBtn)
-	nodesCard := widget.NewCard("Nodes", "", container.NewBorder(addBar, nil, nil, nil, c.nodeList))
+	nodesCard := widget.NewCard("Nodes", "", container.NewBorder(nil, addBtn, nil, nil, c.nodeList))
 
 	// control panel
 	c.primary = widget.NewButton("Connect", c.onPrimary)
@@ -207,8 +192,8 @@ func (c *controller) buildUI() {
 	}
 	control := container.NewVBox(right...)
 
-	body := container.NewHSplit(nodesCard, control)
-	body.Offset = 0.6
+	rightCol := container.New(&fixedWidth{w: 316, gap: 16}, control)
+	body := container.NewBorder(nil, nil, nil, rightCol, nodesCard)
 
 	c.win.SetContent(container.NewPadded(
 		container.NewBorder(header, nil, nil, nil, body)))
@@ -219,6 +204,23 @@ func (c *controller) buildUI() {
 	if hideOnCloseToTray {
 		c.win.SetCloseIntercept(c.hideToTray)
 	}
+}
+
+// fixedWidth pins its single child to a constant width and lets it fill the
+// available height, so the right panel stays put instead of using a thin,
+// hard-to-grab splitter. `gap` is reserved as left gutter between the columns.
+type fixedWidth struct{ w, gap float32 }
+
+func (l *fixedWidth) Layout(objects []fyne.CanvasObject, size fyne.Size) {
+	if len(objects) == 0 {
+		return
+	}
+	objects[0].Resize(fyne.NewSize(l.w-l.gap, size.Height))
+	objects[0].Move(fyne.NewPos(l.gap, 0))
+}
+
+func (l *fixedWidth) MinSize(objects []fyne.CanvasObject) fyne.Size {
+	return fyne.NewSize(l.w, 0)
 }
 
 func (c *controller) setupTray() {
@@ -503,9 +505,7 @@ func (c *controller) applyPorts() bool {
 	return true
 }
 
-func (c *controller) setStatus(text string, dotColor color.NRGBA) {
-	c.statusDot.FillColor = dotColor
-	c.statusDot.Refresh()
+func (c *controller) setStatus(text string, _ color.NRGBA) {
 	c.statusText.SetText(text)
 }
 
