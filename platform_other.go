@@ -8,3 +8,6 @@ const hideOnCloseToTray = false
 
 // hasTray is false on Linux/BSD: no tray/menu-bar icon option is offered.
 const hasTray = false
+
+// trayQuitMenuItem is false on Linux/BSD: no tray is created, so nothing to add.
+const trayQuitMenuItem = false

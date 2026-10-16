@@ -203,11 +203,14 @@ func (c *controller) setupTray() {
 		return
 	}
 	// Left-tapping the tray / menu-bar icon re-shows the window (Windows + macOS,
-	// Fyne 2.7+), so a window hidden by close-intercept is always reachable.
+	// Fyne 2.7+). This is the reopen affordance, so no "Show Window" menu item.
+	// On macOS the app is a normal (Dock) app and quit happens from the Dock, so
+	// the icon carries no menu at all; Windows has no Dock and keeps a Quit item.
 	da.SetSystemTrayWindow(c.win)
-	show := fyne.NewMenuItem("Open Bad Proxy", c.showWindow)
-	quit := fyne.NewMenuItem("Quit", func() { c.shutdown() })
-	da.SetSystemTrayMenu(fyne.NewMenu("", show, fyne.NewMenuItemSeparator(), quit))
+	if trayQuitMenuItem {
+		quit := fyne.NewMenuItem("Quit", func() { c.shutdown() })
+		da.SetSystemTrayMenu(fyne.NewMenu("", quit))
+	}
 }
 
 func (c *controller) selectedNode() (Node, bool) {

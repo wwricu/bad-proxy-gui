@@ -81,7 +81,7 @@ jobs:
             '<key>CFBundleVersion</key><string>1</string>' \
             '<key>LSMinimumSystemVersion</key><string>11.0</string>' \
             '<key>NSHighResolutionCapable</key><true/>' \
-            '<key>LSUIElement</key><true/>' \
+            '<key>LSUIElement</key><false/>' \
             '</dict></plist>' > "$APP/Contents/Info.plist"
           codesign --force --deep -s - "$APP"
           cd build && ditto -c -k --keepParent --sequesterRsrc "Bad Proxy.app" bad-proxy-gui-macos.zip
