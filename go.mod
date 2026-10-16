@@ -4,6 +4,8 @@ go 1.25.7
 
 require fyne.io/fyne/v2 v2.8.2
 
+require fyne.io/systray v1.12.3-0.20260810170012-af4e8e793ec4
+
 require (
 	github.com/wwricu/bad-proxy-core v0.0.0
 	golang.org/x/sys v0.30.0
@@ -12,7 +14,6 @@ require (
 replace github.com/wwricu/bad-proxy-core => ../bad-proxy-core
 
 require (
-	fyne.io/systray v1.12.3-0.20260810170012-af4e8e793ec4 // indirect
 	github.com/BurntSushi/toml v1.6.0 // indirect
 	github.com/FyshOS/fancyfs v0.0.1 // indirect
 	github.com/anthonynsimon/bild v0.14.0 // indirect

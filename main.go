@@ -221,11 +221,12 @@ func (c *controller) setupTray() {
 	if !ok {
 		return
 	}
-	// On Windows let the tray icon left-tap re-show the window (works there).
-	// Skip it on macOS: Fyne's built-in show doesn't activate the accessory app
-	// and it would override our close-intercept, so we reopen via the Open item.
+	// On Windows and macOS let the tray / menu-bar icon left-tap re-show the window.
+	// macOS needs a custom tap handler (see customizeTrayTap) to activate the app and
+	// keep close-to-tray; Windows uses Fyne's default as-is.
 	if trayUsesNativeClickOpen {
 		da.SetSystemTrayWindow(c.win)
+		customizeTrayTap(c)
 	}
 	var items []*fyne.MenuItem
 	if trayOpenMenuItem {

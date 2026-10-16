@@ -2,24 +2,24 @@
 
 package main
 
-// hideOnCloseToTray: closing the window hides it to the menu-bar icon and the
-// proxy keeps running; the menu-bar icon brings it back.
+// Hide-on-close stays accessory (Dock icon drops); the menu-bar icon is the
+// reopen affordance.
 const hideOnCloseToTray = true
 
 // hasTray reports that a menu-bar icon is available.
 const hasTray = true
 
-// trayCanHide is false on macOS: the app runs as an accessory (no Dock icon),
-// so the menu-bar icon is the only way to reopen or quit. Hiding it would strand
-// the app (Fyne has no Dock-reopen/quit hook), so "hide menu-bar icon" is not
-// offered here.
+// trayCanHide is false on macOS: the menu-bar item is the only way back once the
+// window is closed (Dock is dropped on hide), so it cannot be hidden too.
 const trayCanHide = false
 
-// macOS status items act through a menu, so the icon carries Open + Quit.
-const trayOpenMenuItem = true
-const trayQuitMenuItem = true
+// The menu-bar icon carries NO menu — a plain click reopens the window.
+const trayOpenMenuItem = false
+const trayQuitMenuItem = false
 
-// trayUsesNativeClickOpen is false on macOS: Fyne's SetSystemTrayWindow shows the
-// window without activating the (accessory) app, so it can open behind everything.
-// We reopen via the menu's Open item, which runs our own activating showWindow.
-const trayUsesNativeClickOpen = false
+// trayUsesNativeClickOpen is true on macOS: SetSystemTrayWindow makes a left-click
+// fire our tap handler. We override that handler (customizeTrayTap) to run showWindow
+// so the app actually activates and surfaces (Fyne's default just shows the window,
+// which can leave an accessory app's window behind everything), and to keep our
+// close-to-tray intercept that SetSystemTrayWindow otherwise replaces with a plain Hide.
+const trayUsesNativeClickOpen = true
