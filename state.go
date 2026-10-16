@@ -33,6 +33,16 @@ const (
 	modeGFWBlacklist = "gfw-blacklist"
 )
 
+// ProxyMode is the master switch (replaces the old Connect button):
+//   - off:    engine stopped, no OS proxy.
+//   - on:     engine running on the active node; apps use the local ports only.
+//   - system: engine running AND the OS system proxy points at those ports.
+const (
+	modeOff    = "off"
+	modeOn     = "on"
+	modeSystem = "system"
+)
+
 // GUIState is everything persisted between runs. The two local inbounds are
 // fixed (socks + http); the user only picks their ports.
 type GUIState struct {
@@ -40,17 +50,19 @@ type GUIState struct {
 	HttpPort    string `json:"http_port"`
 	Nodes       []Node `json:"nodes"`
 	Active      int    `json:"active"` // index into Nodes; -1 = none
+	ProxyMode   string `json:"proxy_mode"`
 	RoutingMode string `json:"routing_mode"`
-	SystemProxy bool   `json:"system_proxy"`
-	HideTray    bool   `json:"hide_tray"`    // hide the tray / menu-bar icon (applies on restart)
-	AllowLAN    bool   `json:"allow_lan"`    // bind the inbounds on 0.0.0.0 so other devices can use them
-	AutoConnect bool   `json:"auto_connect"` // connect to the active node automatically on launch
-	StartLogin  bool   `json:"start_login"`  // register the app to launch at login
+	HideTray    bool   `json:"hide_tray"`   // hide the tray / menu-bar icon (applies on restart)
+	AllowLAN    bool   `json:"allow_lan"`   // bind the inbounds on 0.0.0.0 so other devices can use them
+	StartLogin  bool   `json:"start_login"` // register the app to launch at login
 }
 
 func defaultState() GUIState {
-	return GUIState{SocksPort: "10808", HttpPort: "10809", Active: -1, RoutingMode: modeGlobal}
+	return GUIState{SocksPort: "10808", HttpPort: "10809", Active: -1, ProxyMode: modeOff, RoutingMode: modeGlobal}
 }
+
+// systemProxyWanted reports whether the OS proxy should be applied right now.
+func (s GUIState) systemProxyWanted() bool { return s.ProxyMode == modeSystem }
 
 // activeNode returns the selected node, or an error if none is selected.
 func (s GUIState) activeNode() (Node, error) {
@@ -88,6 +100,14 @@ func visibleNodeFields(protocol, transport string) nodeFields {
 // one node exists, Active points at a valid one (first node if unset/out of
 // range). With zero nodes it resets Active to -1.
 func (s *GUIState) normalize() {
+	if s.ProxyMode == "" {
+		s.ProxyMode = modeOff
+	}
+	// The "System proxy" mode only exists where applying it is supported; a
+	// stale preference from another platform falls back to plain "on".
+	if s.ProxyMode == modeSystem && !systemProxySupported {
+		s.ProxyMode = modeOn
+	}
 	if s.RoutingMode == "" {
 		s.RoutingMode = modeGlobal
 	}
