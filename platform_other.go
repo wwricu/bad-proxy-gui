@@ -6,8 +6,9 @@ package main
 // window close is left to Fyne's default (quit) rather than hiding invisibly.
 const hideOnCloseToTray = false
 
-// hasTray is false on Linux/BSD: no tray/menu-bar icon option is offered.
+// hasTray is false on Linux/BSD: no tray/menu-bar icon is offered.
 const hasTray = false
 
-// trayQuitMenuItem is false on Linux/BSD: no tray is created, so nothing to add.
+const trayCanHide = false
+const trayOpenMenuItem = false
 const trayQuitMenuItem = false

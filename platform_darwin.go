@@ -3,12 +3,18 @@
 package main
 
 // hideOnCloseToTray: closing the window hides it to the menu-bar icon and the
-// proxy keeps running; the menu-bar icon's left-tap (or the Dock) brings it back.
+// proxy keeps running; the menu-bar icon brings it back.
 const hideOnCloseToTray = true
 
 // hasTray reports that a menu-bar icon is available.
 const hasTray = true
 
-// trayQuitMenuItem is false on macOS: the menu-bar icon is click-to-open only.
-// A normal (non-LSUIElement) app shows a Dock icon, and the user quits from there.
-const trayQuitMenuItem = false
+// trayCanHide is false on macOS: the app runs as an accessory (no Dock icon),
+// so the menu-bar icon is the only way to reopen or quit. Hiding it would strand
+// the app (Fyne has no Dock-reopen/quit hook), so "hide menu-bar icon" is not
+// offered here.
+const trayCanHide = false
+
+// macOS status items act through a menu, so the icon carries Open + Quit.
+const trayOpenMenuItem = true
+const trayQuitMenuItem = true

@@ -174,7 +174,7 @@ func (c *controller) buildUI() {
 	if systemProxySupported {
 		controlChildren = append(controlChildren, widget.NewSeparator(), c.sysProxy)
 	}
-	if hasTray {
+	if trayCanHide {
 		controlChildren = append(controlChildren, c.trayCheck)
 	}
 	control := container.NewVBox(controlChildren...)
@@ -195,21 +195,33 @@ func (c *controller) buildUI() {
 }
 
 func (c *controller) setupTray() {
-	if !hasTray || c.state.HideTray {
+	if !hasTray {
+		return
+	}
+	// The menu-bar / tray icon is only hidden where it's safe to: on Windows a
+	// relaunch pokes the running instance back. On macOS there is no Dock, so the
+	// icon must stay to remain reachable.
+	if trayCanHide && c.state.HideTray {
 		return
 	}
 	da, ok := c.fyneApp.Driver().(desktop.App)
 	if !ok {
 		return
 	}
-	// Left-tapping the tray / menu-bar icon re-shows the window (Windows + macOS,
-	// Fyne 2.7+). This is the reopen affordance, so no "Show Window" menu item.
-	// On macOS the app is a normal (Dock) app and quit happens from the Dock, so
-	// the icon carries no menu at all; Windows has no Dock and keeps a Quit item.
+	// Left-tapping the icon re-shows the window (Windows + macOS, Fyne 2.7+).
 	da.SetSystemTrayWindow(c.win)
+	var items []*fyne.MenuItem
+	if trayOpenMenuItem {
+		items = append(items, fyne.NewMenuItem("Open Bad Proxy", c.showWindow))
+	}
 	if trayQuitMenuItem {
-		quit := fyne.NewMenuItem("Quit", func() { c.shutdown() })
-		da.SetSystemTrayMenu(fyne.NewMenu("", quit))
+		if len(items) > 0 {
+			items = append(items, fyne.NewMenuItemSeparator())
+		}
+		items = append(items, fyne.NewMenuItem("Quit", func() { c.shutdown() }))
+	}
+	if len(items) > 0 {
+		da.SetSystemTrayMenu(fyne.NewMenu("", items...))
 	}
 }
 
