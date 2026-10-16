@@ -105,7 +105,7 @@ func (c *controller) buildUI() {
 	})
 	delBtn := widget.NewButtonWithIcon("Delete", theme.DeleteIcon(), c.onDeleteNode)
 	nodeActions := container.NewHBox(addBtn, editBtn, layout.NewSpacer(), delBtn)
-	nodesCard := widget.NewCard("Nodes", "", container.NewBorder(nil, nodeActions, nil, nil, c.nodeList))
+	nodesCard := widget.NewCard("", "", container.NewBorder(nil, nodeActions, nil, nil, c.nodeList))
 
 	// control panel
 	c.primary = widget.NewButton("Connect", c.onPrimary)
@@ -132,14 +132,13 @@ func (c *controller) buildUI() {
 	)
 	control := container.NewVBox(
 		c.primary,
-		container.NewHBox(c.testBtn),
+		c.testBtn,
 		widget.NewSeparator(),
-		widget.NewLabel("Local Listeners"),
 		portForm,
 		widget.NewSeparator(),
 		c.sysProxy,
 	)
-	controlCard := widget.NewCard("Connection", "", control)
+	controlCard := widget.NewCard("", "", control)
 
 	body := container.NewHSplit(nodesCard, controlCard)
 	body.Offset = 0.55
