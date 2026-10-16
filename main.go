@@ -29,7 +29,7 @@ type controller struct {
 	testBtn    *widget.Button
 	socksPort  *widget.Entry
 	httpPort   *widget.Entry
-	routing    *widget.RadioGroup
+	routing    *widget.Select
 	sysProxy   *widget.Button
 	trayCheck  *widget.Check
 	allowLAN   *widget.Check
@@ -37,14 +37,14 @@ type controller struct {
 	startLogin *widget.Check
 }
 
-// routingOpts pair the user-facing labels with the engine routing modes.
+// routingOpts pair the user-facing labels with the (placeholder) routing modes.
 var routingOpts = []struct {
 	label string
 	mode  string
 }{
-	{"Global proxy", modeProxy},
-	{"Global direct", modeDirect},
-	{"Bypass blocked", modeBypass},
+	{"Global", modeGlobal},
+	{"Bypass CN whitelist", modeCNWhitelist},
+	{"Bypass GFW blacklist", modeGFWBlacklist},
 }
 
 func routingLabel(mode string) string {
@@ -62,7 +62,7 @@ func routingModeFor(label string) string {
 			return o.mode
 		}
 	}
-	return modeProxy
+	return modeGlobal
 }
 
 func routingLabels() []string {
@@ -209,13 +209,9 @@ func (c *controller) buildUI() {
 	c.httpPort = widget.NewEntry()
 	c.httpPort.SetText(c.state.HttpPort)
 
-	c.routing = widget.NewRadioGroup(routingLabels(), func(sel string) {
+	c.routing = widget.NewSelect(routingLabels(), func(sel string) {
 		c.state.RoutingMode = routingModeFor(sel)
 		c.persist()
-		if c.eng.running() {
-			dialog.ShowInformation("Reconnect to apply",
-				"Changing the routing mode takes effect the next time you connect.", c.win)
-		}
 	})
 	c.routing.SetSelected(routingLabel(c.state.RoutingMode))
 
@@ -274,14 +270,13 @@ func (c *controller) buildUI() {
 	controlItems := []fyne.CanvasObject{
 		container.NewVBox(connectionItems...),
 		widget.NewSeparator(),
-		sectionLabel("Routing"),
-		c.routing,
-		widget.NewSeparator(),
 		sectionLabel("Local proxy ports"),
 		portForm,
 	}
 	var optionRows []fyne.CanvasObject
-	optionRows = append(optionRows, c.allowLAN, c.autoConn)
+	optionRows = append(optionRows,
+		container.NewBorder(nil, nil, nil, c.routing, sectionLabel("Routing")),
+		c.allowLAN, c.autoConn)
 	if startAtLoginSupported {
 		optionRows = append(optionRows, c.startLogin)
 	}
@@ -379,11 +374,8 @@ func (c *controller) connect() {
 	if !c.applyPorts() {
 		return
 	}
-	// direct mode needs no upstream node; proxy/bypass modes do.
-	if c.state.modeNeedsNode() {
-		if _, ok := c.selectedNode(); !ok {
-			return
-		}
+	if _, ok := c.selectedNode(); !ok {
+		return
 	}
 	c.setStatus("Connecting…", colAccent)
 	if err := c.eng.start(c.state); err != nil {

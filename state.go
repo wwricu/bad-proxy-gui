@@ -22,13 +22,15 @@ type Node struct {
 	Padding   string `json:"padding"`   // xhttp X-Padding range
 }
 
-// Routing modes are the presets the GUI exposes. The engine's "global proxy"
-// and "bypass blocked" modes need an active node; "global direct" connects
-// straight out and ignores the node.
+// Routing modes are the presets the UI exposes. They are currently PLACEHOLDERS
+// — buildConfig always uses "global" — reserved for a later routing engine.
+//   - global:      every request leaves through the node.
+//   - cn-whitelist: mainland destinations direct, the rest through the node.
+//   - gfw-blacklist: blocked domains through the node, the rest direct.
 const (
-	modeProxy  = "proxy"  // every request leaves through the active node
-	modeDirect = "direct" // every request connects directly (node ignored)
-	modeBypass = "bypass" // blocked domains via the node, everything else direct
+	modeGlobal       = "global"
+	modeCNWhitelist  = "cn-whitelist"
+	modeGFWBlacklist = "gfw-blacklist"
 )
 
 // GUIState is everything persisted between runs. The two local inbounds are
@@ -47,11 +49,8 @@ type GUIState struct {
 }
 
 func defaultState() GUIState {
-	return GUIState{SocksPort: "10808", HttpPort: "10809", Active: -1, RoutingMode: modeProxy}
+	return GUIState{SocksPort: "10808", HttpPort: "10809", Active: -1, RoutingMode: modeGlobal}
 }
-
-// modeNeedsNode reports whether the routing mode requires an active upstream.
-func (s GUIState) modeNeedsNode() bool { return s.RoutingMode != modeDirect }
 
 // activeNode returns the selected node, or an error if none is selected.
 func (s GUIState) activeNode() (Node, error) {
@@ -90,7 +89,7 @@ func visibleNodeFields(protocol, transport string) nodeFields {
 // range). With zero nodes it resets Active to -1.
 func (s *GUIState) normalize() {
 	if s.RoutingMode == "" {
-		s.RoutingMode = modeProxy
+		s.RoutingMode = modeGlobal
 	}
 	if len(s.Nodes) == 0 {
 		s.Active = -1
