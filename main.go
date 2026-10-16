@@ -147,6 +147,10 @@ func (c *controller) buildUI() {
 	c.win.SetContent(container.NewPadded(
 		container.NewBorder(header, nil, nil, nil, body)))
 	c.win.Resize(fyne.NewSize(720, 440))
+	// Closing hides to the tray so the proxy keeps running; the tray Open item
+	// restores it. Without this Fyne *closes* the window, and Show() on a closed
+	// window is a no-op (the bug where tray "Show" did nothing).
+	c.win.SetCloseIntercept(func() { c.win.Hide() })
 }
 
 func (c *controller) setupTray() {
@@ -154,7 +158,7 @@ func (c *controller) setupTray() {
 	if !ok {
 		return
 	}
-	show := fyne.NewMenuItem("Show", func() { c.win.Show(); c.win.RequestFocus() })
+	show := fyne.NewMenuItem("Open Bad Proxy", func() { c.win.Show(); c.win.RequestFocus() })
 	quit := fyne.NewMenuItem("Quit", func() { c.shutdown() })
 	da.SetSystemTrayMenu(fyne.NewMenu("", show, fyne.NewMenuItemSeparator(), quit))
 }
