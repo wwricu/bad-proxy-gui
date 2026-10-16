@@ -31,6 +31,8 @@ type controller struct {
 	httpPort   *widget.Entry
 	sysProxy   *widget.Check
 	trayCheck  *widget.Check
+	allowLAN   *widget.Check
+	autoConn   *widget.Check
 }
 
 func main() {
@@ -57,6 +59,11 @@ func main() {
 	// surfaces normally; closing hides to the menu-bar item (becomes accessory).
 	becomeForeground(c.win.Title())
 	c.setStatus("Not connected", colMuted)
+	if c.state.AutoConnect {
+		if _, err := c.state.activeNode(); err == nil {
+			c.connect()
+		}
+	}
 	go c.watchReopen(lock)
 	c.win.ShowAndRun()
 }
@@ -75,11 +82,13 @@ func (c *controller) watchReopen(ln net.Listener) {
 }
 
 func (c *controller) showWindow() {
-	// On macOS bring the app to the foreground (and restore the Dock icon) so the
-	// window actually surfaces; a no-op on Windows.
-	becomeForeground(c.win.Title())
+	// Show first, THEN bring the app forward. becomeForeground orders the main
+	// window (matched by title) key+front, which only works once that window is
+	// actually in AppKit's window list — calling it before Show found nothing and
+	// left the window hidden. No-op on Windows.
 	c.win.Show()
 	c.win.RequestFocus()
+	becomeForeground(c.win.Title())
 }
 
 // hideToTray hides the window (proxy keeps running) and, on macOS, drops back to
@@ -179,36 +188,51 @@ func (c *controller) buildUI() {
 	})
 	c.trayCheck.SetChecked(!c.state.HideTray)
 
+	c.allowLAN = widget.NewCheck("Allow devices on the local network", func(on bool) {
+		c.state.AllowLAN = on
+		c.persist()
+		if c.eng.running() {
+			dialog.ShowInformation("Reconnect to apply",
+				"Changing the bind address takes effect the next time you connect.", c.win)
+		}
+	})
+	c.allowLAN.SetChecked(c.state.AllowLAN)
+	c.autoConn = widget.NewCheck("Connect automatically on launch", func(on bool) {
+		c.state.AutoConnect = on
+		c.persist()
+	})
+	c.autoConn.SetChecked(c.state.AutoConnect)
+
 	portForm := widget.NewForm(
 		widget.NewFormItem("SOCKS port", c.socksPort),
 		widget.NewFormItem("HTTP port", c.httpPort),
 	)
 
 	controlItems := []fyne.CanvasObject{
-		c.statusText,
+		sectionLabel("Connection"),
 		container.NewGridWithColumns(2, c.primary, c.testBtn),
+		c.statusText,
 		widget.NewSeparator(),
 		sectionLabel("Local proxy ports"),
 		portForm,
 	}
 	var optionRows []fyne.CanvasObject
+	optionRows = append(optionRows, c.allowLAN, c.autoConn)
 	if systemProxySupported {
 		optionRows = append(optionRows, c.sysProxy)
 	}
 	if trayCanHide {
 		optionRows = append(optionRows, c.trayCheck)
 	}
-	if len(optionRows) > 0 {
-		controlItems = append(controlItems, widget.NewSeparator(), sectionLabel("Options"))
-		controlItems = append(controlItems, optionRows...)
-	}
+	controlItems = append(controlItems, widget.NewSeparator(), sectionLabel("Options"))
+	controlItems = append(controlItems, optionRows...)
 	control := container.NewPadded(container.NewVBox(controlItems...))
 
-	rightCol := container.New(&fixedWidth{w: 300, gap: 20}, control)
+	rightCol := container.New(&fixedWidth{w: 330, gap: 24}, control)
 	body := container.NewBorder(nil, nil, nil, rightCol, left)
 
 	c.win.SetContent(container.NewPadded(body))
-	c.win.Resize(fyne.NewSize(760, 460))
+	c.win.Resize(fyne.NewSize(820, 500))
 	// Platform-specific: on macOS/Windows closing hides to the tray so the proxy
 	// keeps running (macOS also drops to accessory / no Dock icon); elsewhere the
 	// close falls through to Fyne's default quit.

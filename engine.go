@@ -43,15 +43,20 @@ func (e *engine) stop() {
 }
 
 // buildConfig turns GUI state into the engine's config: fixed socks+http
-// loopback inbounds, and the active node as the default (empty-tag) outbound so
-// every request leaves through it. Console logging stays at warn so the engine
-// does not spam stdout from inside the GUI process.
+// inbounds, and the active node as the default (empty-tag) outbound so every
+// request leaves through it. Inbounds bind to loopback unless AllowLAN is on
+// (then 0.0.0.0 so devices on the local network can use the proxy). Console
+// logging stays at warn so the engine does not spam stdout from inside the GUI.
 func buildConfig(s GUIState, node Node) core.Config {
+	host := "127.0.0.1"
+	if s.AllowLAN {
+		host = "0.0.0.0"
+	}
 	return core.Config{
 		General: core.GeneralConfig{ConsoleLevel: "warn"},
 		Inbounds: []core.InboundConfig{
-			{Protocol: "socks", Host: "127.0.0.1", Port: s.SocksPort},
-			{Protocol: "http", Host: "127.0.0.1", Port: s.HttpPort},
+			{Protocol: "socks", Host: host, Port: s.SocksPort},
+			{Protocol: "http", Host: host, Port: s.HttpPort},
 		},
 		Outbounds: []core.OutboundConfig{node.outbound()},
 	}

@@ -30,7 +30,9 @@ type GUIState struct {
 	Nodes       []Node `json:"nodes"`
 	Active      int    `json:"active"` // index into Nodes; -1 = none
 	SystemProxy bool   `json:"system_proxy"`
-	HideTray    bool   `json:"hide_tray"` // hide the tray / menu-bar icon (applies on restart)
+	HideTray    bool   `json:"hide_tray"`    // hide the tray / menu-bar icon (applies on restart)
+	AllowLAN    bool   `json:"allow_lan"`    // bind the inbounds on 0.0.0.0 so other devices can use them
+	AutoConnect bool   `json:"auto_connect"` // connect to the active node automatically on launch
 }
 
 func defaultState() GUIState {
