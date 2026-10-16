@@ -25,10 +25,6 @@ type appTheme struct{ fyne.Theme }
 
 func newTheme() fyne.Theme { return &appTheme{Theme: theme.DefaultTheme()} }
 
-// Variant always reports light so icon resources and any variant-aware widgets pick
-// the dark-on-light artwork regardless of the OS preference.
-func (t *appTheme) Variant() fyne.ThemeVariant { return theme.LightVariant }
-
 func (t *appTheme) Color(name fyne.ThemeColorName, _ fyne.ThemeVariant) color.Color {
 	switch name {
 	case theme.ColorNameBackground:
@@ -60,7 +56,7 @@ func (t *appTheme) Color(name fyne.ThemeColorName, _ fyne.ThemeVariant) color.Co
 	case theme.ColorNameSuccess:
 		return colOK
 	default:
-		return t.Theme.Color(name, theme.LightVariant)
+		return t.Theme.Color(name, theme.VariantLight)
 	}
 }
 
