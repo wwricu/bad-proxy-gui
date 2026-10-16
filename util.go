@@ -27,16 +27,6 @@ func indexOfNode(nodes []Node, name string) int {
 	return -1
 }
 
-func removeNode(nodes []Node, name string) []Node {
-	out := nodes[:0:0]
-	for _, n := range nodes {
-		if n.Name != name {
-			out = append(out, n)
-		}
-	}
-	return out
-}
-
 func replaceNode(nodes []Node, name string, with Node) []Node {
 	for i := range nodes {
 		if nodes[i].Name == name {

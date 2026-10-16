@@ -7,26 +7,29 @@ import (
 	"fyne.io/fyne/v2/theme"
 )
 
-// Neutral charcoal palette with a single desaturated steel-blue accent.
-// Deliberately low-chroma and dense so it reads as a serious desktop tool.
+// Light palette: near-white canvas, white cards, a single desaturated steel-blue
+// accent. Kept low-chroma so it still reads as a calm, serious desktop tool.
 var (
-	colBG        = color.NRGBA{0x14, 0x16, 0x1a, 0xff}
-	colSurface   = color.NRGBA{0x1d, 0x20, 0x25, 0xff}
-	colSurfaceHi = color.NRGBA{0x26, 0x2a, 0x30, 0xff}
-	colBorder    = color.NRGBA{0x33, 0x38, 0x40, 0xff}
-	colFG        = color.NRGBA{0xcf, 0xd3, 0xda, 0xff}
-	colMuted     = color.NRGBA{0x76, 0x7d, 0x88, 0xff}
-	colAccent    = color.NRGBA{0x4f, 0x7c, 0xac, 0xff}
-	colAccentTxt = color.NRGBA{0xee, 0xf2, 0xf7, 0xff}
-	colOK        = color.NRGBA{0x55, 0x93, 0x6f, 0xff}
-	colErr       = color.NRGBA{0xb5, 0x60, 0x5f, 0xff}
+	colBG        = color.NRGBA{0xf5, 0xf6, 0xf8, 0xff}
+	colSurface   = color.NRGBA{0xff, 0xff, 0xff, 0xff}
+	colSurfaceHi = color.NRGBA{0xe7, 0xea, 0xef, 0xff}
+	colBorder    = color.NRGBA{0xd2, 0xd7, 0xde, 0xff}
+	colFG        = color.NRGBA{0x22, 0x26, 0x2b, 0xff}
+	colMuted     = color.NRGBA{0x69, 0x70, 0x79, 0xff}
+	colAccent    = color.NRGBA{0x2f, 0x6f, 0x9f, 0xff}
+	colOK        = color.NRGBA{0x2e, 0x7d, 0x4f, 0xff}
+	colErr       = color.NRGBA{0xb2, 0x3b, 0x3b, 0xff}
 )
 
 type appTheme struct{ fyne.Theme }
 
 func newTheme() fyne.Theme { return &appTheme{Theme: theme.DefaultTheme()} }
 
-func (t *appTheme) Color(name fyne.ThemeColorName, variant fyne.ThemeVariant) color.Color {
+// Variant always reports light so icon resources and any variant-aware widgets pick
+// the dark-on-light artwork regardless of the OS preference.
+func (t *appTheme) Variant() fyne.ThemeVariant { return theme.LightVariant }
+
+func (t *appTheme) Color(name fyne.ThemeColorName, _ fyne.ThemeVariant) color.Color {
 	switch name {
 	case theme.ColorNameBackground:
 		return colBG
@@ -34,25 +37,21 @@ func (t *appTheme) Color(name fyne.ThemeColorName, variant fyne.ThemeVariant) co
 		return colFG
 	case theme.ColorNamePrimary, theme.ColorNameHyperlink, theme.ColorNameFocus:
 		return colAccent
-	case theme.ColorNameSelection:
-		return color.NRGBA{0x4f, 0x7c, 0xac, 0x40}
-	case theme.ColorNameHeaderBackground:
+	case theme.ColorNameInputBackground, theme.ColorNameMenuBackground, theme.ColorNameOverlayBackground:
 		return colSurface
+	case theme.ColorNameHeaderBackground:
+		return colSurfaceHi
 	case theme.ColorNameButton:
 		return colSurfaceHi
-	case theme.ColorNameInputBackground:
-		return colSurface
+	case theme.ColorNameDisabledButton:
+		return colSurfaceHi
 	case theme.ColorNameInputBorder:
 		return colBorder
 	case theme.ColorNamePlaceHolder, theme.ColorNameDisabled:
 		return colMuted
-	case theme.ColorNameDisabledButton:
-		return colSurface
-	case theme.ColorNameMenuBackground, theme.ColorNameOverlayBackground:
-		return colSurface
-	case theme.ColorNameSeparator:
-		return colBorder
-	case theme.ColorNameScrollBar:
+	case theme.ColorNameSelection:
+		return color.NRGBA{0x2f, 0x6f, 0x9f, 0x33}
+	case theme.ColorNameSeparator, theme.ColorNameScrollBar:
 		return colBorder
 	case theme.ColorNameScrollBarBackground:
 		return colBG
@@ -61,24 +60,24 @@ func (t *appTheme) Color(name fyne.ThemeColorName, variant fyne.ThemeVariant) co
 	case theme.ColorNameSuccess:
 		return colOK
 	default:
-		return t.Theme.Color(name, variant)
+		return t.Theme.Color(name, theme.LightVariant)
 	}
 }
 
 func (t *appTheme) Size(name fyne.ThemeSizeName) float32 {
 	switch name {
 	case theme.SizeNamePadding:
-		return 5
-	case theme.SizeNameInputRadius, theme.SizeNameSelectionRadius:
-		return 5
-	case theme.SizeNameScrollBar:
 		return 6
+	case theme.SizeNameInputRadius, theme.SizeNameSelectionRadius:
+		return 6
+	case theme.SizeNameScrollBar:
+		return 7
 	case theme.SizeNameText:
 		return 13
 	case theme.SizeNameHeadingText:
-		return 15
+		return 16
 	case theme.SizeNameCaptionText:
-		return 11
+		return 12
 	default:
 		return t.Theme.Size(name)
 	}

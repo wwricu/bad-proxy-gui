@@ -109,7 +109,7 @@ func (c *controller) buildUI() {
 		c.statusText,
 	)
 
-	// node list
+	// node list — each row carries its own Edit / Delete actions
 	c.nodeList = widget.NewList(
 		func() int { return len(c.state.Nodes) },
 		func() fyne.CanvasObject {
@@ -119,16 +119,30 @@ func (c *controller) buildUI() {
 			sub := widget.NewLabel("detail")
 			sub.Truncation = fyne.TextTruncateEllipsis
 			sub.Importance = widget.MediumImportance
-			return container.NewVBox(name, sub)
+			texts := container.NewVBox(name, sub)
+			edit := widget.NewButtonWithIcon("", theme.SettingsIcon(), nil)
+			edit.Importance = widget.MediumImportance
+			del := widget.NewButtonWithIcon("", theme.DeleteIcon(), nil)
+			del.Importance = widget.DangerImportance
+			actions := container.NewHBox(edit, del)
+			return container.NewBorder(nil, nil, nil, actions, texts)
 		},
 		func(id widget.ListItemID, obj fyne.CanvasObject) {
 			if id < 0 || id >= len(c.state.Nodes) {
 				return
 			}
 			n := c.state.Nodes[id]
-			box := obj.(*fyne.Container)
-			box.Objects[0].(*widget.Label).SetText(n.Name)
-			box.Objects[1].(*widget.Label).SetText(nodeDetail(n))
+			row := obj.(*fyne.Container)
+			texts := row.Objects[0].(*fyne.Container)
+			texts.Objects[0].(*widget.Label).SetText(n.Name)
+			texts.Objects[1].(*widget.Label).SetText(nodeDetail(n))
+			actions := row.Objects[1].(*fyne.Container)
+			actions.Objects[0].(*widget.Button).OnTapped = func() {
+				if nn, ok := c.nodeByID(id); ok {
+					c.openNodeForm(&nn)
+				}
+			}
+			actions.Objects[1].(*widget.Button).OnTapped = func() { c.confirmDelete(id) }
 		},
 	)
 	c.nodeList.OnSelected = func(id widget.ListItemID) {
@@ -140,14 +154,9 @@ func (c *controller) buildUI() {
 	}
 
 	addBtn := widget.NewButtonWithIcon("Add", theme.ContentAddIcon(), func() { c.openNodeForm(nil) })
-	editBtn := widget.NewButton("Edit", func() {
-		if n, ok := c.selectedNode(); ok {
-			c.openNodeForm(&n)
-		}
-	})
-	delBtn := widget.NewButtonWithIcon("Delete", theme.DeleteIcon(), c.onDeleteNode)
-	nodeActions := container.NewHBox(addBtn, editBtn, layout.NewSpacer(), delBtn)
-	nodesCard := widget.NewCard("", "", container.NewBorder(nil, nodeActions, nil, nil, c.nodeList))
+	addBtn.Importance = widget.HighImportance
+	addBar := container.NewHBox(layout.NewSpacer(), addBtn)
+	nodesCard := widget.NewCard("Nodes", "", container.NewBorder(addBar, nil, nil, nil, c.nodeList))
 
 	// control panel
 	c.primary = widget.NewButton("Connect", c.onPrimary)
@@ -176,24 +185,29 @@ func (c *controller) buildUI() {
 	c.trayCheck.SetChecked(!c.state.HideTray)
 
 	portForm := widget.NewForm(
-		widget.NewFormItem("SOCKS", c.socksPort),
-		widget.NewFormItem("HTTP", c.httpPort),
+		widget.NewFormItem("SOCKS port", c.socksPort),
+		widget.NewFormItem("HTTP port", c.httpPort),
 	)
-	controlChildren := []fyne.CanvasObject{
+	connCard := widget.NewCard("Connection", "", container.NewVBox(
 		container.NewGridWithColumns(2, c.primary, c.testBtn),
 		widget.NewSeparator(),
 		portForm,
-	}
+	))
+
+	var optionRows []fyne.CanvasObject
 	if systemProxySupported {
-		controlChildren = append(controlChildren, widget.NewSeparator(), c.sysProxy)
+		optionRows = append(optionRows, c.sysProxy)
 	}
 	if trayCanHide {
-		controlChildren = append(controlChildren, c.trayCheck)
+		optionRows = append(optionRows, c.trayCheck)
 	}
-	control := container.NewVBox(controlChildren...)
-	controlCard := widget.NewCard("", "", control)
+	right := []fyne.CanvasObject{connCard}
+	if len(optionRows) > 0 {
+		right = append(right, widget.NewCard("Options", "", container.NewVBox(optionRows...)))
+	}
+	control := container.NewVBox(right...)
 
-	body := container.NewHSplit(nodesCard, controlCard)
+	body := container.NewHSplit(nodesCard, control)
 	body.Offset = 0.6
 
 	c.win.SetContent(container.NewPadded(
@@ -305,15 +319,44 @@ func (c *controller) onTest() {
 	}()
 }
 
-func (c *controller) onDeleteNode() {
-	node, ok := c.selectedNode()
+func (c *controller) nodeByID(id int) (Node, bool) {
+	if id < 0 || id >= len(c.state.Nodes) {
+		return Node{}, false
+	}
+	return c.state.Nodes[id], true
+}
+
+// confirmDelete pops a lightweight yes/no before removing the node at id.
+func (c *controller) confirmDelete(id int) {
+	n, ok := c.nodeByID(id)
 	if !ok {
+		return
+	}
+	if c.eng.running() && id == c.state.Active {
+		dialog.ShowConfirm("Disconnect first?",
+			"Delete "+n.Name+"? The current connection will be stopped.", func(yes bool) {
+				if yes {
+					c.disconnect()
+					c.deleteNodeAt(id)
+				}
+			}, c.win)
+		return
+	}
+	dialog.ShowConfirm("Delete node?", "Remove "+n.Name+"?", func(yes bool) {
+		if yes {
+			c.deleteNodeAt(id)
+		}
+	}, c.win)
+}
+
+func (c *controller) deleteNodeAt(id int) {
+	if id < 0 || id >= len(c.state.Nodes) {
 		return
 	}
 	if c.eng.running() {
 		c.disconnect()
 	}
-	c.state.Nodes = removeNode(c.state.Nodes, node.Name)
+	c.state.Nodes = append(c.state.Nodes[:id:id], c.state.Nodes[id+1:]...)
 	c.state.normalize()
 	c.nodeList.UnselectAll()
 	c.nodeList.Refresh()
@@ -381,7 +424,8 @@ func (c *controller) openNodeForm(edit *Node) {
 			n.TLS = tls.Checked
 		}
 		if n.Name == "" || n.Server == "" || n.Port == "" {
-			dialog.ShowError(fmt.Errorf("name, server and port are required"), c.win)
+			dialog.ShowInformation("Missing details",
+				"Name, server and port are required.", c.win)
 			return
 		}
 		if edit != nil {
@@ -451,7 +495,7 @@ func (c *controller) openNodeForm(edit *Node) {
 
 func (c *controller) applyPorts() bool {
 	if !validPort(c.socksPort.Text) || !validPort(c.httpPort.Text) {
-		dialog.ShowError(fmt.Errorf("ports must be 1-65535"), c.win)
+		c.setStatus("Ports must be 1-65535", colErr)
 		return false
 	}
 	c.state.SocksPort = c.socksPort.Text
