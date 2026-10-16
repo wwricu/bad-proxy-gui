@@ -55,7 +55,7 @@ func main() {
 	c.setupTray()
 	// Start as a foreground app (Dock icon + activated) so the initial window
 	// surfaces normally; closing hides to the menu-bar item (becomes accessory).
-	becomeForeground()
+	becomeForeground(c.win.Title())
 	c.setStatus("Not connected", colMuted)
 	go c.watchReopen(lock)
 	c.win.ShowAndRun()
@@ -77,7 +77,7 @@ func (c *controller) watchReopen(ln net.Listener) {
 func (c *controller) showWindow() {
 	// On macOS bring the app to the foreground (and restore the Dock icon) so the
 	// window actually surfaces; a no-op on Windows.
-	becomeForeground()
+	becomeForeground(c.win.Title())
 	c.win.Show()
 	c.win.RequestFocus()
 }
@@ -89,13 +89,21 @@ func (c *controller) hideToTray() {
 	becomeBackground()
 }
 
+// sectionLabel is a flat, muted bold caption used to group controls without the
+// rounded "card" chrome — keeps the surface calm and single-tone.
+func sectionLabel(text string) *widget.Label {
+	l := widget.NewLabel(text)
+	l.TextStyle = fyne.TextStyle{Bold: true}
+	l.Importance = widget.LowImportance
+	return l
+}
+
 func (c *controller) buildUI() {
-	// header: live status text only (brand dot & title removed)
+	// status line (no brand, no colored dot)
 	c.statusText = widget.NewLabel("")
 	c.statusText.Importance = widget.LowImportance
-	header := container.NewHBox(c.statusText)
 
-	// node list — each row carries its own Edit / Delete actions
+	// node list — each row carries its own (muted) Edit / Delete actions
 	c.nodeList = widget.NewList(
 		func() int { return len(c.state.Nodes) },
 		func() fyne.CanvasObject {
@@ -109,7 +117,7 @@ func (c *controller) buildUI() {
 			edit := widget.NewButtonWithIcon("", theme.SettingsIcon(), nil)
 			edit.Importance = widget.MediumImportance
 			del := widget.NewButtonWithIcon("", theme.DeleteIcon(), nil)
-			del.Importance = widget.DangerImportance
+			del.Importance = widget.MediumImportance
 			actions := container.NewHBox(edit, del)
 			return container.NewBorder(nil, nil, nil, actions, texts)
 		},
@@ -139,14 +147,16 @@ func (c *controller) buildUI() {
 		c.nodeList.Select(c.state.Active)
 	}
 
-	addBtn := widget.NewButtonWithIcon("Add node", theme.ContentAddIcon(), func() { c.openNodeForm(nil) })
-	addBtn.Importance = widget.HighImportance
-	nodesCard := widget.NewCard("Nodes", "", container.NewBorder(nil, addBtn, nil, nil, c.nodeList))
+	addBtn := widget.NewButtonWithIcon("", theme.ContentAddIcon(), func() { c.openNodeForm(nil) })
+	addBtn.Importance = widget.MediumImportance
+	nodesHeader := container.NewBorder(nil, nil, nil, addBtn, sectionLabel("Nodes"))
+	left := container.NewBorder(nodesHeader, nil, nil, nil, c.nodeList)
 
 	// control panel
 	c.primary = widget.NewButton("Connect", c.onPrimary)
 	c.primary.Importance = widget.HighImportance
 	c.testBtn = widget.NewButton("Test", c.onTest)
+	c.testBtn.Importance = widget.MediumImportance
 	c.socksPort = widget.NewEntry()
 	c.socksPort.SetText(c.state.SocksPort)
 	c.httpPort = widget.NewEntry()
@@ -173,12 +183,14 @@ func (c *controller) buildUI() {
 		widget.NewFormItem("SOCKS port", c.socksPort),
 		widget.NewFormItem("HTTP port", c.httpPort),
 	)
-	connCard := widget.NewCard("Connection", "", container.NewVBox(
+
+	controlItems := []fyne.CanvasObject{
+		c.statusText,
 		container.NewGridWithColumns(2, c.primary, c.testBtn),
 		widget.NewSeparator(),
+		sectionLabel("Local proxy ports"),
 		portForm,
-	))
-
+	}
 	var optionRows []fyne.CanvasObject
 	if systemProxySupported {
 		optionRows = append(optionRows, c.sysProxy)
@@ -186,18 +198,17 @@ func (c *controller) buildUI() {
 	if trayCanHide {
 		optionRows = append(optionRows, c.trayCheck)
 	}
-	right := []fyne.CanvasObject{connCard}
 	if len(optionRows) > 0 {
-		right = append(right, widget.NewCard("Options", "", container.NewVBox(optionRows...)))
+		controlItems = append(controlItems, widget.NewSeparator(), sectionLabel("Options"))
+		controlItems = append(controlItems, optionRows...)
 	}
-	control := container.NewVBox(right...)
+	control := container.NewPadded(container.NewVBox(controlItems...))
 
-	rightCol := container.New(&fixedWidth{w: 316, gap: 16}, control)
-	body := container.NewBorder(nil, nil, nil, rightCol, nodesCard)
+	rightCol := container.New(&fixedWidth{w: 300, gap: 20}, control)
+	body := container.NewBorder(nil, nil, nil, rightCol, left)
 
-	c.win.SetContent(container.NewPadded(
-		container.NewBorder(header, nil, nil, nil, body)))
-	c.win.Resize(fyne.NewSize(720, 440))
+	c.win.SetContent(container.NewPadded(body))
+	c.win.Resize(fyne.NewSize(760, 460))
 	// Platform-specific: on macOS/Windows closing hides to the tray so the proxy
 	// keeps running (macOS also drops to accessory / no Dock icon); elsewhere the
 	// close falls through to Fyne's default quit.
