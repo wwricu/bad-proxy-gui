@@ -22,11 +22,11 @@ func (e *engine) start(s GUIState) error {
 	if e.proxy != nil {
 		return errors.New("already running")
 	}
-	node, err := s.activeNode()
+	cfg, err := buildConfig(s)
 	if err != nil {
 		return err
 	}
-	p, err := core.New(buildConfig(s, node))
+	p, err := core.New(cfg)
 	if err != nil {
 		return err
 	}
@@ -42,30 +42,59 @@ func (e *engine) stop() {
 	}
 }
 
-// buildConfig turns GUI state into the engine's config: fixed socks+http
-// inbounds, and the active node as the default (empty-tag) outbound so every
-// request leaves through it. Inbounds bind to loopback unless AllowLAN is on
-// (then 0.0.0.0 so devices on the local network can use the proxy). Console
-// logging stays at warn so the engine does not spam stdout from inside the GUI.
-func buildConfig(s GUIState, node Node) core.Config {
+// buildConfig turns GUI state into the engine's config. Inbounds are fixed
+// socks+http, bound to loopback unless AllowLAN is on (then 0.0.0.0 so devices
+// on the local network can use them). The routing mode picks the outbounds and
+// router:
+//   - proxy:  the active node is the default (empty-tag) outbound; all traffic.
+//   - direct: freedom is the default; the node is ignored, all traffic direct.
+//   - bypass: freedom is the default, the node is tagged "proxy", and a router
+//     sends only blocked domains through it; the rest go direct.
+//
+// Console logging stays at warn so the engine does not spam stdout from inside
+// the GUI.
+func buildConfig(s GUIState) (core.Config, error) {
 	host := "127.0.0.1"
 	if s.AllowLAN {
 		host = "0.0.0.0"
 	}
-	return core.Config{
+	cfg := core.Config{
 		General: core.GeneralConfig{ConsoleLevel: "warn"},
 		Inbounds: []core.InboundConfig{
 			{Protocol: "socks", Host: host, Port: s.SocksPort},
 			{Protocol: "http", Host: host, Port: s.HttpPort},
 		},
-		Outbounds: []core.OutboundConfig{node.outbound()},
 	}
+	switch s.RoutingMode {
+	case modeDirect:
+		cfg.Outbounds = []core.OutboundConfig{freedomOutbound("")}
+	case modeBypass:
+		node, err := s.activeNode()
+		if err != nil {
+			return core.Config{}, err
+		}
+		cfg.Outbounds = []core.OutboundConfig{
+			freedomOutbound(""),           // default: direct
+			node.outbound(proxyRouterTag), // blocked hosts: the node
+		}
+		cfg.Router = blockedRouter()
+	default: // modeProxy
+		node, err := s.activeNode()
+		if err != nil {
+			return core.Config{}, err
+		}
+		cfg.Outbounds = []core.OutboundConfig{node.outbound("")}
+	}
+	return cfg, nil
 }
 
-func (n Node) outbound() core.OutboundConfig {
+func freedomOutbound(tag string) core.OutboundConfig {
+	return core.OutboundConfig{Tag: tag, Protocol: core.FREEDOM}
+}
+
+func (n Node) outbound(tag string) core.OutboundConfig {
 	return core.OutboundConfig{
-		// empty tag = the default outbound the router falls back to
-		Tag:      "",
+		Tag:      tag,
 		Protocol: n.Protocol,
 		Secret:   n.Secret,
 		Host:     n.Server,

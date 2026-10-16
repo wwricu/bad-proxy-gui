@@ -29,10 +29,48 @@ type controller struct {
 	testBtn    *widget.Button
 	socksPort  *widget.Entry
 	httpPort   *widget.Entry
-	sysProxy   *widget.Check
+	routing    *widget.RadioGroup
+	sysProxy   *widget.Button
 	trayCheck  *widget.Check
 	allowLAN   *widget.Check
 	autoConn   *widget.Check
+	startLogin *widget.Check
+}
+
+// routingOpts pair the user-facing labels with the engine routing modes.
+var routingOpts = []struct {
+	label string
+	mode  string
+}{
+	{"Global proxy", modeProxy},
+	{"Global direct", modeDirect},
+	{"Bypass blocked", modeBypass},
+}
+
+func routingLabel(mode string) string {
+	for _, o := range routingOpts {
+		if o.mode == mode {
+			return o.label
+		}
+	}
+	return routingOpts[0].label
+}
+
+func routingModeFor(label string) string {
+	for _, o := range routingOpts {
+		if o.label == label {
+			return o.mode
+		}
+	}
+	return modeProxy
+}
+
+func routingLabels() []string {
+	out := make([]string, len(routingOpts))
+	for i, o := range routingOpts {
+		out[i] = o.label
+	}
+	return out
 }
 
 func main() {
@@ -170,16 +208,23 @@ func (c *controller) buildUI() {
 	c.socksPort.SetText(c.state.SocksPort)
 	c.httpPort = widget.NewEntry()
 	c.httpPort.SetText(c.state.HttpPort)
-	c.sysProxy = widget.NewCheck("Route system traffic through proxy", func(on bool) {
-		c.state.SystemProxy = on
-		if err := applySystemProxy(on, c.state); err != nil {
-			dialog.ShowError(err, c.win)
-			c.sysProxy.SetChecked(false)
-			c.state.SystemProxy = false
-		}
+
+	c.routing = widget.NewRadioGroup(routingLabels(), func(sel string) {
+		c.state.RoutingMode = routingModeFor(sel)
 		c.persist()
+		if c.eng.running() {
+			dialog.ShowInformation("Reconnect to apply",
+				"Changing the routing mode takes effect the next time you connect.", c.win)
+		}
 	})
-	c.sysProxy.SetChecked(c.state.SystemProxy)
+	c.routing.SetSelected(routingLabel(c.state.RoutingMode))
+
+	// system proxy is an action tied to connectivity, so it is a prominent
+	// toggle button in the Connection group rather than a stray checkbox.
+	c.sysProxy = widget.NewButton("", c.toggleSystemProxy)
+	c.sysProxy.Importance = widget.HighImportance
+	c.refreshSystemProxy()
+
 	c.trayCheck = widget.NewCheck("Show tray icon", func(on bool) {
 		c.state.HideTray = !on
 		c.persist()
@@ -202,24 +247,43 @@ func (c *controller) buildUI() {
 		c.persist()
 	})
 	c.autoConn.SetChecked(c.state.AutoConnect)
+	c.startLogin = widget.NewCheck("Start at login", func(on bool) {
+		if err := setStartAtLogin(on); err != nil {
+			dialog.ShowError(err, c.win)
+			c.startLogin.SetChecked(!on)
+			return
+		}
+		c.state.StartLogin = on
+		c.persist()
+	})
+	c.startLogin.SetChecked(c.state.StartLogin)
 
 	portForm := widget.NewForm(
 		widget.NewFormItem("SOCKS port", c.socksPort),
 		widget.NewFormItem("HTTP port", c.httpPort),
 	)
 
-	controlItems := []fyne.CanvasObject{
+	connectionItems := []fyne.CanvasObject{
 		sectionLabel("Connection"),
 		container.NewGridWithColumns(2, c.primary, c.testBtn),
 		c.statusText,
+	}
+	if systemProxySupported {
+		connectionItems = append(connectionItems, c.sysProxy)
+	}
+	controlItems := []fyne.CanvasObject{
+		container.NewVBox(connectionItems...),
+		widget.NewSeparator(),
+		sectionLabel("Routing"),
+		c.routing,
 		widget.NewSeparator(),
 		sectionLabel("Local proxy ports"),
 		portForm,
 	}
 	var optionRows []fyne.CanvasObject
 	optionRows = append(optionRows, c.allowLAN, c.autoConn)
-	if systemProxySupported {
-		optionRows = append(optionRows, c.sysProxy)
+	if startAtLoginSupported {
+		optionRows = append(optionRows, c.startLogin)
 	}
 	if trayCanHide {
 		optionRows = append(optionRows, c.trayCheck)
@@ -315,8 +379,11 @@ func (c *controller) connect() {
 	if !c.applyPorts() {
 		return
 	}
-	if _, ok := c.selectedNode(); !ok {
-		return
+	// direct mode needs no upstream node; proxy/bypass modes do.
+	if c.state.modeNeedsNode() {
+		if _, ok := c.selectedNode(); !ok {
+			return
+		}
 	}
 	c.setStatus("Connecting…", colAccent)
 	if err := c.eng.start(c.state); err != nil {
@@ -325,6 +392,11 @@ func (c *controller) connect() {
 		return
 	}
 	c.setStatus(fmt.Sprintf("Connected · socks :%s · http :%s", c.state.SocksPort, c.state.HttpPort), colOK)
+	if c.state.SystemProxy {
+		if err := applySystemProxy(true, c.state); err != nil {
+			dialog.ShowError(fmt.Errorf("connected, but the system proxy could not be set: %w", err), c.win)
+		}
+	}
 	c.primary.SetText("Disconnect")
 	c.primary.Importance = widget.DangerImportance
 	c.primary.Refresh()
@@ -333,10 +405,41 @@ func (c *controller) connect() {
 
 func (c *controller) disconnect() {
 	c.eng.stop()
+	if c.state.SystemProxy {
+		_ = applySystemProxy(false, c.state)
+	}
 	c.setStatus("Not connected", colMuted)
 	c.primary.SetText("Connect")
 	c.primary.Importance = widget.HighImportance
 	c.primary.Refresh()
+}
+
+// refreshSystemProxy relabels the toggle button to reflect the desired state.
+func (c *controller) refreshSystemProxy() {
+	if c.state.SystemProxy {
+		c.sysProxy.SetText("System proxy: on")
+		c.sysProxy.Importance = widget.HighImportance
+	} else {
+		c.sysProxy.SetText("System proxy: off")
+		c.sysProxy.Importance = widget.MediumImportance
+	}
+	c.sysProxy.Refresh()
+}
+
+// toggleSystemProxy flips the desired system-proxy state. It is applied live
+// only while connected; setting it while disconnected just records the intent so
+// the OS is never pointed at a dead port.
+func (c *controller) toggleSystemProxy() {
+	on := !c.state.SystemProxy
+	if c.eng.running() {
+		if err := applySystemProxy(on, c.state); err != nil {
+			dialog.ShowError(err, c.win)
+			return
+		}
+	}
+	c.state.SystemProxy = on
+	c.refreshSystemProxy()
+	c.persist()
 }
 
 func (c *controller) onTest() {
