@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image/color"
 	"log"
+	"net"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -32,9 +33,18 @@ type controller struct {
 	socksPort  *widget.Entry
 	httpPort   *widget.Entry
 	sysProxy   *widget.Check
+	trayCheck  *widget.Check
 }
 
 func main() {
+	// Single instance: a second launch surfaces the running window and exits,
+	// so the app can run in the background (even with the tray icon hidden).
+	lock, primary := acquireSingleton()
+	if !primary {
+		return
+	}
+	defer lock.Close()
+
 	a := app.NewWithID("icu.wwr.badproxy.gui")
 	a.Settings().SetTheme(newTheme())
 
@@ -47,7 +57,26 @@ func main() {
 	c.buildUI()
 	c.setupTray()
 	c.setStatus("Not connected", colMuted)
+	go c.watchReopen(lock)
 	c.win.ShowAndRun()
+}
+
+// watchReopen accepts loopback pings from later launches and brings the window
+// back on the UI thread.
+func (c *controller) watchReopen(ln net.Listener) {
+	for {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		_ = conn.Close()
+		fyne.Do(c.showWindow)
+	}
+}
+
+func (c *controller) showWindow() {
+	c.win.Show()
+	c.win.RequestFocus()
 }
 
 func (c *controller) buildUI() {
@@ -125,6 +154,13 @@ func (c *controller) buildUI() {
 		c.persist()
 	})
 	c.sysProxy.SetChecked(c.state.SystemProxy)
+	c.trayCheck = widget.NewCheck("Show tray icon", func(on bool) {
+		c.state.HideTray = !on
+		c.persist()
+		dialog.ShowInformation("Restart required",
+			"The tray / menu-bar icon change applies the next time Bad Proxy starts.", c.win)
+	})
+	c.trayCheck.SetChecked(!c.state.HideTray)
 
 	portForm := widget.NewForm(
 		widget.NewFormItem("SOCKS", c.socksPort),
@@ -137,6 +173,9 @@ func (c *controller) buildUI() {
 	}
 	if systemProxySupported {
 		controlChildren = append(controlChildren, widget.NewSeparator(), c.sysProxy)
+	}
+	if hasTray {
+		controlChildren = append(controlChildren, c.trayCheck)
 	}
 	control := container.NewVBox(controlChildren...)
 	controlCard := widget.NewCard("", "", control)
@@ -156,11 +195,14 @@ func (c *controller) buildUI() {
 }
 
 func (c *controller) setupTray() {
+	if !hasTray || c.state.HideTray {
+		return
+	}
 	da, ok := c.fyneApp.Driver().(desktop.App)
 	if !ok {
 		return
 	}
-	show := fyne.NewMenuItem("Open Bad Proxy", func() { c.win.Show(); c.win.RequestFocus() })
+	show := fyne.NewMenuItem("Open Bad Proxy", c.showWindow)
 	quit := fyne.NewMenuItem("Quit", func() { c.shutdown() })
 	da.SetSystemTrayMenu(fyne.NewMenu("", show, fyne.NewMenuItemSeparator(), quit))
 }
@@ -191,7 +233,7 @@ func (c *controller) connect() {
 	}
 	c.setStatus("Connecting…", colAccent)
 	if err := c.eng.start(c.state); err != nil {
-		c.setStatus("Error: " + err.Error(), colErr)
+		c.setStatus("Error: "+err.Error(), colErr)
 		dialog.ShowError(err, c.win)
 		return
 	}

@@ -30,6 +30,7 @@ type GUIState struct {
 	Nodes       []Node `json:"nodes"`
 	Active      int    `json:"active"` // index into Nodes; -1 = none
 	SystemProxy bool   `json:"system_proxy"`
+	HideTray    bool   `json:"hide_tray"` // hide the tray / menu-bar icon (applies on restart)
 }
 
 func defaultState() GUIState {
