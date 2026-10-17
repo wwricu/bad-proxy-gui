@@ -204,6 +204,75 @@ body {
     outline: none;
 }
 
+/* TUN toggle, pinned to the right end of the status bar */
+.tun-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 10px;
+    background: white;
+    border: 1px solid #d2d7de;
+    border-radius: 6px;
+}
+
+.tun-label {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    color: #8a929c;
+    line-height: 1.2;
+}
+
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 34px;
+    height: 18px;
+}
+
+.switch input {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.slider {
+    position: absolute;
+    inset: 0;
+    background: #c4cbd4;
+    border-radius: 9px;
+    transition: background 0.15s ease;
+    pointer-events: none;
+}
+
+.slider::before {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: white;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+    transition: transform 0.15s ease;
+}
+
+.switch input:checked + .slider {
+    background: #2f6f9f;
+}
+
+.switch input:checked + .slider::before {
+    transform: translateX(16px);
+}
+
+.switch input:disabled + .slider {
+    opacity: 0.5;
+}
+
 /* Context menu */
 .ctx-menu {
     position: fixed;

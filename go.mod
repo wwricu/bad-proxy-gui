@@ -1,12 +1,15 @@
 module github.com/wwricu/bad-proxy-gui
 
-go 1.25.0
+go 1.26.3
 
 require (
 	github.com/energye/systray v1.0.3
 	github.com/wailsapp/wails/v2 v2.16.0
 	github.com/wwricu/bad-proxy-core v0.0.0
-	golang.org/x/sys v0.46.0
+	github.com/xjasonlyu/tun2socks/v2 v2.7.0
+	golang.org/x/sys v0.48.0
+	golang.zx2c4.com/wireguard v0.0.0-20261006164505-2631ce99a06f
+	gvisor.dev/gvisor v0.0.0-20260701204157-69c2d17aea96
 )
 
 require (
@@ -14,6 +17,7 @@ require (
 	github.com/bep/debounce v1.2.1 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/godbus/dbus/v5 v5.2.2 // indirect
+	github.com/google/btree v1.1.3 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/jchv/go-winloader v0.0.0-20210711035445-715c2860da7e // indirect
@@ -34,9 +38,12 @@ require (
 	github.com/valyala/fasttemplate v1.2.2 // indirect
 	github.com/wailsapp/go-webview2 v1.0.22 // indirect
 	github.com/wailsapp/mimetype v1.4.1 // indirect
-	golang.org/x/crypto v0.53.0 // indirect
-	golang.org/x/net v0.56.0 // indirect
-	golang.org/x/text v0.40.0 // indirect
+	golang.org/x/crypto v0.57.0 // indirect
+	golang.org/x/exp v0.0.0-20260611194520-c48552f49976 // indirect
+	golang.org/x/net v0.59.0 // indirect
+	golang.org/x/text v0.42.0 // indirect
+	golang.org/x/time v0.15.0 // indirect
+	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
 )
 
 replace github.com/wwricu/bad-proxy-core => ../bad-proxy-core

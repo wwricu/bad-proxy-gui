@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	"github.com/wwricu/bad-proxy-gui/tunplat"
 )
 
 // App exposes backend methods to the frontend via Wails runtime binding.
@@ -17,6 +18,7 @@ type App struct {
 	store    *store
 	trayOn   bool
 	quitting bool
+	tun      tunRunner
 }
 
 // startup is called when the app starts.
@@ -30,6 +32,9 @@ func (a *App) startup(ctx context.Context) {
 		a.trayOn = true
 		go startTray(a.showWindow, a.quit)
 	}
+	// A run that was killed rather than closed left the system resolver pointed
+	// at this app's DNS port. Fix that before anything else touches the network.
+	a.recoverTunToken()
 	// The engine runs from launch: direct mode is always buildable, so the
 	// local inbounds answer immediately and mode switches are cheap restarts.
 	if err := a.eng.start(a.st); err != nil {
@@ -99,6 +104,11 @@ func (a *App) SetProxyMode(mode string) error {
 	prev := a.st.ProxyMode
 	a.st.ProxyMode = mode
 	a.st.normalize()
+	// A tunnel over a direct engine would carry traffic nowhere, and direct mode
+	// has no node to carry it with, so the switch comes off with the mode.
+	if mode == modeDirect && a.tun.running() {
+		a.tun.down()
+	}
 	if err := a.store.save(a.st); err != nil {
 		return err
 	}
@@ -255,13 +265,21 @@ func (a *App) restartEngine() error {
 	if err := a.eng.start(a.st); err != nil {
 		return fmt.Errorf("proxy restart failed: %w", err)
 	}
+	// The tunnel dials this engine, so a new port or a new routing preset has
+	// to reach it too. It is re-pointed rather than rebuilt: tearing the adapter
+	// down would drop every connection for a settings change.
+	a.tun.refresh(a.st)
 	return nil
 }
 
-// shutdown stops the engine before exit. In system mode the OS proxy points at
-// these now-dead ports, so it is cleared; any other mode never configured it and
-// leaves it alone.
+// shutdown stops the tunnel first and the engine second. The tunnel's resolver
+// answers through the engine's SOCKS inbound and it owns the machine's DNS
+// settings, so both have to be released before the process leaves the building.
 func (a *App) shutdown() {
+	if a.tun.running() {
+		a.tun.down()
+		a.st.TunEnabled = false
+	}
 	if a.eng.running() {
 		a.eng.stop()
 	}
@@ -302,6 +320,7 @@ func (a *App) GetPlatformInfo() map[string]bool {
 		"systemProxySupported": systemProxySupported,
 		"nativeContextMenu":    nativeContextMenuSupported,
 		"nodeDialog":           nodeDialogSupported,
+		"tunSupported":         tunplat.Supported(),
 	}
 }
 

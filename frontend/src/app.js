@@ -49,6 +49,11 @@ function render() {
     document.getElementById('allowLAN').checked = state.allow_lan;
     document.getElementById('startLogin').checked = state.start_login;
     document.getElementById('hideTray').checked = state.hide_tray;
+    document.getElementById('tunSwitch').checked = !!state.tun_enabled;
+
+    if (platformInfo && platformInfo.tunSupported) {
+        document.getElementById('tunGroup').style.display = 'flex';
+    }
 
     if (platformInfo && platformInfo.startLoginSupported) {
         document.getElementById('startLoginGroup').style.display = 'flex';
@@ -304,6 +309,24 @@ document.getElementById('startLogin').onchange = async (e) => {
 
 document.getElementById('hideTray').onchange = async (e) => {
     await API().SetHideTray(e.target.checked);
+    await loadState();
+};
+
+// Bringing the tunnel up or down touches the virtual adapter and the system
+// resolver, and can wait on an elevation prompt - long enough that a second
+// click during the first one would be a real hazard, not just a nuisance.
+document.getElementById('tunSwitch').onchange = async (e) => {
+    const sw = e.target;
+    const on = sw.checked;
+    sw.disabled = true;
+    setStatus(on ? 'Enabling TUN...' : 'Disabling TUN...');
+    try {
+        await API().SetTun(on);
+        setStatus('');
+    } catch (err) {
+        setStatus('TUN failed: ' + err.message);
+    }
+    sw.disabled = false;
     await loadState();
 };
 
