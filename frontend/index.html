@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bad Proxy GUI</title>
+    <link rel="stylesheet" href="src/style.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Left panel: node list -->
+        <div class="left-panel">
+            <div id="nodeList" class="node-list"></div>
+            <div id="addNodeRow" class="add-node-row">+ Add node</div>
+        </div>
+
+        <!-- Right panel: controls -->
+        <div class="right-panel">
+            <div class="panel-section">
+                <div class="section-title">Mode</div>
+                <select id="modeSelect">
+                    <option value="direct">Direct</option>
+                    <option value="proxy">Proxy</option>
+                    <option value="system">System Proxy</option>
+                </select>
+            </div>
+            <div class="panel-section">
+                <div class="section-title">Routing</div>
+                <select id="routingSelect">
+                    <option value="global">Global</option>
+                    <option value="cn-whitelist">Bypass CN</option>
+                    <option value="gfw-blacklist">Bypass GFW</option>
+                </select>
+            </div>
+            <div class="panel-section">
+                <div class="section-title">Settings</div>
+                <div class="control-group checkbox">
+                    <input type="checkbox" id="allowLAN">
+                    <label for="allowLAN">Allow LAN</label>
+                </div>
+                <div class="control-group checkbox" id="startLoginGroup" style="display:none;">
+                    <input type="checkbox" id="startLogin">
+                    <label for="startLogin">Start at login</label>
+                </div>
+                <div class="control-group checkbox" id="hideTrayGroup" style="display:none;">
+                    <input type="checkbox" id="hideTray">
+                    <label for="hideTray">Hide tray icon (restart required)</label>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bottom status bar with port inputs -->
+    <div class="status-bar">
+        <div class="port-controls">
+            <div class="port-control">
+                <label>SOCKS</label>
+                <input type="text" id="socksPort" class="port-input">
+            </div>
+            <div class="port-control">
+                <label>HTTP</label>
+                <input type="text" id="httpPort" class="port-input">
+            </div>
+        </div>
+        <span id="statusText" class="status"></span>
+    </div>
+
+    <!-- Node context menu -->
+    <div id="ctxMenu" class="ctx-menu" style="display:none;">
+        <div class="ctx-item" id="ctxTest">Test</div>
+        <div class="ctx-item" id="ctxEdit">Edit</div>
+        <div class="ctx-sep"></div>
+        <div class="ctx-item danger" id="ctxDelete">Delete</div>
+    </div>
+
+    <!-- Node add/edit modal -->
+    <div id="modalOverlay" class="modal-overlay" style="display:none;">
+        <div class="modal">
+            <div class="modal-title" id="modalTitle">Add Node</div>
+            <div class="form-grid">
+                <label>Name</label><input type="text" id="fName">
+                <label>Protocol</label>
+                <select id="fProtocol">
+                    <option value="vless">vless</option>
+                    <option value="btp">btp</option>
+                    <option value="trojan">trojan</option>
+                    <option value="socks">socks</option>
+                </select>
+                <label>Address</label><input type="text" id="fServer">
+                <label>Port</label><input type="text" id="fPort">
+                <label id="lSecret">Secret</label><input type="text" id="fSecret">
+                <label>Transport</label>
+                <select id="fTransport">
+                    <option value="tls">tls</option>
+                    <option value="xhttp">xhttp</option>
+                </select>
+                <label id="lAuthority">Domain (SNI/Host)</label><input type="text" id="fAuthority">
+                <label id="lPath">Path</label><input type="text" id="fPath">
+                <label id="lPadding">Padding range</label><input type="text" id="fPadding">
+            </div>
+            <div class="modal-actions">
+                <button id="modalCancel" class="btn-secondary">Cancel</button>
+                <button id="modalSave" class="btn-primary">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="src/app.js"></script>
+</body>
+</html>

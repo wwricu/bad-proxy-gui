@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/wwricu/bad-proxy-core/core"
+	"github.com/wwricu/bad-proxy-core/router"
 )
 
 // engine owns one embedded core.Proxy lifecycle. The GUI builds a core.Config
@@ -44,18 +45,47 @@ func (e *engine) stop() {
 
 // buildConfig turns GUI state into the engine's config. Inbounds are fixed
 // socks+http, bound to loopback unless AllowLAN is on (then 0.0.0.0 so devices
-// on the local network can use them). For now every request leaves through the
-// active node as the default (empty-tag) outbound — the routing-mode dropdown in
-// the UI is a placeholder and does not change engine behavior yet. Console
-// logging stays at warn so the engine does not spam stdout from inside the GUI.
+// on the local network can use them). The proxy mode picks the base setup:
+//   - direct: a built-in freedom outbound; traffic leaves straight out. This is
+//     always valid, even with zero nodes, so the engine can run from launch.
+//   - proxy: the active node; requires a selected node. The routing mode then
+//     splits traffic by domain lists from rules.dat:
+//   - global:        everything through the node.
+//   - cn-whitelist:  mainland (geosite cn) domains direct, the rest via node.
+//   - gfw-blacklist: non-mainland (geolocation-!cn) domains via the node, the
+//     rest direct — the classic "bypass GFW" split.
+//
+// Routing is domain-based only: the core router matches the destination host,
+// so raw-IP connections always take the default outbound. Console logging
+// stays at warn so the engine does not spam stdout.
 func buildConfig(s GUIState) (core.Config, error) {
 	host := "127.0.0.1"
 	if s.AllowLAN {
 		host = "0.0.0.0"
 	}
-	node, err := s.activeNode()
-	if err != nil {
-		return core.Config{}, err
+	outbounds := []core.OutboundConfig{{Tag: "", Protocol: core.FREEDOM}}
+	var routers []router.Config
+	if s.ProxyMode != modeDirect {
+		node, err := s.activeNode()
+		if err != nil {
+			return core.Config{}, err
+		}
+		switch s.RoutingMode {
+		case modeCNWhitelist:
+			outbounds = []core.OutboundConfig{
+				node.outbound(""),
+				{Tag: "direct", Protocol: core.FREEDOM},
+			}
+			routers = []router.Config{{Tag: "direct", Rules: []string{"cn"}}}
+		case modeGFWBlacklist:
+			outbounds = []core.OutboundConfig{
+				{Tag: "", Protocol: core.FREEDOM},
+				node.outbound("proxy"),
+			}
+			routers = []router.Config{{Tag: "proxy", Rules: []string{"geolocation-!cn"}}}
+		default: // global
+			outbounds = []core.OutboundConfig{node.outbound("")}
+		}
 	}
 	return core.Config{
 		General: core.GeneralConfig{ConsoleLevel: "warn"},
@@ -63,7 +93,9 @@ func buildConfig(s GUIState) (core.Config, error) {
 			{Protocol: "socks", Host: host, Port: s.SocksPort},
 			{Protocol: "http", Host: host, Port: s.HttpPort},
 		},
-		Outbounds: []core.OutboundConfig{node.outbound("")},
+		Outbounds:  outbounds,
+		Router:     routers,
+		RouterPath: ensureRulesDat(),
 	}, nil
 }
 
@@ -75,11 +107,13 @@ func (n Node) outbound(tag string) core.OutboundConfig {
 		Host:     n.Server,
 		Port:     n.Port,
 		Transport: core.TransportConfig{
-			Type:      n.Transport,
+			Type:      encryptedTransport(n.Transport),
 			Path:      n.Path,
 			Authority: n.Authority,
-			Tls:       n.TLS,
-			Padding:   n.Padding,
+			// Always on: the client makes no plaintext hop, so xhttp runs over
+			// https and there is no user-facing toggle to turn it off.
+			Tls:     true,
+			Padding: n.Padding,
 		},
 	}
 }

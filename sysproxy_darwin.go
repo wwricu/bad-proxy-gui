@@ -8,43 +8,44 @@ import (
 	"strings"
 )
 
-// systemProxySupported reports that this platform can toggle the OS proxy.
+// systemProxySupported reports that this platform can set and clear the OS proxy.
 const systemProxySupported = true
 
-// applySystemProxy toggles the macOS system proxy for the active network
-// service via networksetup, pointing web/HTTPS at the local HTTP listener and
-// SOCKS at the local SOCKS listener.
-func applySystemProxy(enable bool, s GUIState) error {
+// setSystemProxy points the active service's http and https proxies at
+// 127.0.0.1:port and turns them on. networksetup stores the server/port, so
+// clearSystemProxy only flips the state off; setting is what puts our ports back.
+func setSystemProxy(port string) error {
 	svc, err := activeNetworkService()
 	if err != nil {
 		return err
 	}
-	if !enable {
-		for _, args := range [][]string{
-			{"-setwebproxystate", svc, "off"},
-			{"-setsecurewebproxystate", svc, "off"},
-			{"-setsocksfirewallproxystate", svc, "off"},
-		} {
-			if err := networksetup(args...); err != nil {
-				return err
-			}
-		}
-		return nil
-	}
-
 	for _, args := range [][]string{
-		{"-setwebproxy", svc, "127.0.0.1", s.HttpPort},
-		{"-setsecurewebproxy", svc, "127.0.0.1", s.HttpPort},
-		{"-setsocksfirewallproxy", svc, "127.0.0.1", s.SocksPort},
+		{"-setwebproxy", svc, "127.0.0.1", port},
+		{"-setwebproxystate", svc, "on"},
+		{"-setsecurewebproxy", svc, "127.0.0.1", port},
+		{"-setsecurewebproxystate", svc, "on"},
 	} {
 		if err := networksetup(args...); err != nil {
 			return err
 		}
 	}
+	return nil
+}
+
+// clearSystemProxy switches every proxy kind networksetup knows about off for
+// the active service. macOS exposes no API to erase the stored server/port, so
+// "off" is as close to a wipe as the platform allows; it is what actually stops
+// traffic from using a proxy left behind by another program.
+func clearSystemProxy() error {
+	svc, err := activeNetworkService()
+	if err != nil {
+		return err
+	}
 	for _, args := range [][]string{
-		{"-setwebproxystate", svc, "on"},
-		{"-setsecurewebproxystate", svc, "on"},
-		{"-setsocksfirewallproxystate", svc, "on"},
+		{"-setwebproxystate", svc, "off"},
+		{"-setsecurewebproxystate", svc, "off"},
+		{"-setsocksfirewallproxystate", svc, "off"},
+		{"-setautoproxystate", svc, "off"},
 	} {
 		if err := networksetup(args...); err != nil {
 			return err

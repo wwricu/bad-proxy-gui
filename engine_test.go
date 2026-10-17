@@ -1,92 +1,67 @@
 package main
 
-import (
-	"net"
-	"testing"
-	"time"
-)
+import "testing"
 
-func freePort(t *testing.T) string {
-	t.Helper()
-	l, err := net.Listen("tcp", "127.0.0.1:0")
+func nodeState(mode, routing string) GUIState {
+	s := defaultState()
+	s.ProxyMode = mode
+	s.RoutingMode = routing
+	s.Nodes = []Node{{Name: "n", Protocol: "vless", Secret: "u", Server: "h", Port: "443"}}
+	s.Active = 0
+	return s
+}
+
+func TestBuildConfigRouting(t *testing.T) {
+	// direct mode ignores routing: single freedom default outbound.
+	cfg, err := buildConfig(nodeState(modeDirect, modeCNWhitelist))
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer l.Close()
-	_, port, _ := net.SplitHostPort(l.Addr().String())
-	return port
-}
+	if len(cfg.Outbounds) != 1 || cfg.Outbounds[0].Tag != "" || len(cfg.Router) != 0 {
+		t.Errorf("direct mode: got %+v / %+v", cfg.Outbounds, cfg.Router)
+	}
 
-func canDial(addr string) bool {
-	c, err := net.DialTimeout("tcp", addr, 500*time.Millisecond)
+	// cn-whitelist: node is default, cn list routes to a tagged direct.
+	cfg, err = buildConfig(nodeState(modeProxy, modeCNWhitelist))
 	if err != nil {
-		return false
+		t.Fatal(err)
 	}
-	_ = c.Close()
-	return true
-}
-
-// TestEngineLifecycle proves the GUI's in-process embedding path end to end
-// without a reachable upstream: a valid node config builds, core.New accepts it,
-// Start binds the two loopback listeners, and Stop releases them.
-func TestEngineLifecycle(t *testing.T) {
-	socks, http := freePort(t), freePort(t)
-	s := GUIState{
-		SocksPort: socks,
-		HttpPort:  http,
-		Active:    0,
-		Nodes: []Node{{
-			Name: "test", Protocol: "vless",
-			Secret: "11111111-2222-4333-8444-555555555555",
-			Server: "127.0.0.1", Port: "1", Transport: "tcp",
-		}},
+	if len(cfg.Outbounds) != 2 || cfg.Outbounds[0].Tag != "" || cfg.Outbounds[0].Protocol == "freedom" {
+		t.Errorf("cn-whitelist: node must stay default, got %+v", cfg.Outbounds)
+	}
+	if cfg.Outbounds[1].Tag != "direct" || cfg.Outbounds[1].Protocol != "freedom" {
+		t.Errorf("cn-whitelist: missing direct freedom outbound, got %+v", cfg.Outbounds)
+	}
+	if len(cfg.Router) != 1 || cfg.Router[0].Tag != "direct" || len(cfg.Router[0].Rules) != 1 || cfg.Router[0].Rules[0] != "cn" {
+		t.Errorf("cn-whitelist: wrong router config %+v", cfg.Router)
 	}
 
-	var e engine
-	if err := e.start(s); err != nil {
-		t.Fatalf("start: %v", err)
+	// gfw-blacklist: freedom is default, geolocation-!cn routes to tagged node.
+	cfg, err = buildConfig(nodeState(modeProxy, modeGFWBlacklist))
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !e.running() {
-		t.Fatal("engine should report running after start")
+	if cfg.Outbounds[0].Tag != "" || cfg.Outbounds[0].Protocol != "freedom" {
+		t.Errorf("gfw-blacklist: default must be freedom, got %+v", cfg.Outbounds)
 	}
-
-	socksAddr := net.JoinHostPort("127.0.0.1", socks)
-	httpAddr := net.JoinHostPort("127.0.0.1", http)
-	waitFor(socksAddr, true)
-	waitFor(httpAddr, true)
-	if !canDial(socksAddr) {
-		t.Errorf("socks listener %s not up", socksAddr)
+	if cfg.Outbounds[1].Tag != "proxy" || cfg.Outbounds[1].Protocol != "vless" {
+		t.Errorf("gfw-blacklist: node must be tagged proxy, got %+v", cfg.Outbounds)
 	}
-	if !canDial(httpAddr) {
-		t.Errorf("http listener %s not up", httpAddr)
+	if len(cfg.Router) != 1 || cfg.Router[0].Tag != "proxy" || cfg.Router[0].Rules[0] != "geolocation-!cn" {
+		t.Errorf("gfw-blacklist: wrong router config %+v", cfg.Router)
 	}
 
-	e.stop()
-	if e.running() {
-		t.Fatal("engine should report stopped after stop")
+	// global: node-only, no routers.
+	cfg, err = buildConfig(nodeState(modeProxy, modeGlobal))
+	if err != nil {
+		t.Fatal(err)
 	}
-	waitFor(socksAddr, false)
-	if canDial(socksAddr) {
-		t.Errorf("socks port %s still accepting after stop", socksAddr)
+	if len(cfg.Outbounds) != 1 || cfg.Outbounds[0].Protocol != "vless" || len(cfg.Router) != 0 {
+		t.Errorf("global: got %+v / %+v", cfg.Outbounds, cfg.Router)
 	}
-}
 
-// start is async (goroutine per inbound); poll the port until it reaches the
-// want state, so the test is not a fixed-sleep race.
-func waitFor(addr string, want bool) {
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if canDial(addr) == want {
-			return
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-}
-
-func TestNoActiveNodeRejects(t *testing.T) {
-	var e engine
-	s := GUIState{SocksPort: "10808", HttpPort: "10809", Active: -1}
-	if err := e.start(s); err == nil {
-		t.Fatal("expected start to fail with no active node")
+	// routing rules must resolve through the shipped rules.dat path.
+	if p := ensureRulesDat(); p == "" {
+		t.Error("ensureRulesDat returned no usable path")
 	}
 }

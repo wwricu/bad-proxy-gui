@@ -1,0 +1,19 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "Bad Proxy GUI",
+  "outputfilename": "bad-proxy-gui",
+  "frontend:install": "",
+  "frontend:build": "",
+  "frontend:dev:watcher": "",
+  "frontend:dev:serverUrl": "",
+  "author": {
+    "name": "wwr",
+    "email": ""
+  },
+  "info": {
+    "companyName": "wwricu",
+    "productName": "Bad Proxy",
+    "productVersion": "0.0.1-beta-3",
+    "copyright": "Copyright © 2026 wwr"
+  }
+}

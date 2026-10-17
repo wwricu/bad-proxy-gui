@@ -1,14 +1,21 @@
 # build output
-build/
-dist/
+/build/bin/
+/dist/
 *.exe
+*.exe~
 *.app
 *.dylib
+
+# Wails regenerates these bindings on every build.
+/frontend/wailsjs/
 
 # local settings / profiles (may hold secrets — never commit)
 *.local.json
 settings.json
 profiles.json
+
+# routing dataset, downloaded by package-windows.sh
+rules.dat
 
 # editor / OS
 .idea/

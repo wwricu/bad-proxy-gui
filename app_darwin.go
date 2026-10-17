@@ -11,10 +11,9 @@ package main
 // becomeForeground shows the Dock icon and activates the app, then orders ONLY the
 // main window (matched by title) key+front. Reopening from the accessory state needs
 // the explicit ordering: after setActivationPolicy+activate the app becomes active
-// (Dock appears) but Fyne's win.Show alone can leave the hidden NSWindow off-screen.
-// We must NOT loop over every window — Fyne creates a hidden "SystrayMonitor" helper
-// window (whose close is intercepted as Quit), so surfacing it flashes an empty window
-// and closing it terminates the app.
+// (Dock appears), but a hidden NSWindow still needs makeKeyAndOrderFront to surface.
+// We must NOT loop over every window — helper windows (e.g. from the menu-bar
+// status item) would flash empty windows or intercept close-as-quit.
 static void becomeForeground(const char* title) {
 	[NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
 	[NSApp activateIgnoringOtherApps:YES];

@@ -21,22 +21,17 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: Install MinGW-w64 (gcc for Fyne CGO)
-        run: choco install mingw -y
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.16.0
       - name: Point core replace at the in-workspace checkout
         run: go mod edit -replace github.com/wwricu/bad-proxy-core=./bad-proxy-core
-      - name: Build exe
-        shell: pwsh
-        env:
-          CGO_ENABLED: "1"
-        run: |
-          go env -w CGO_ENABLED=1
-          mkdir build
-          go build -trimpath -ldflags "-s -w -H windowsgui" -o build/bad-proxy-gui-windows-amd64.exe .
+      - name: Build portable bundle
+        shell: bash
+        run: bash package-windows.sh
       - uses: actions/upload-artifact@v4
         with:
           name: windows
-          path: build/bad-proxy-gui-windows-amd64.exe
+          path: dist/bad-proxy-gui-windows-amd64.zip
           if-no-files-found: error
 
   build-macos:
@@ -70,6 +65,8 @@ jobs:
           APP="build/Bad Proxy.app"
           mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
           cp build/bad-proxy-gui-universal "$APP/Contents/MacOS/bad-proxy-gui"
+          curl -fsSL -o "$APP/Contents/Resources/rules.dat" \
+            https://github.com/wwricu/domain-list-community/releases/latest/download/rules.dat
           cat > "$APP/Contents/Info.plist" <<'PLIST'
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -80,8 +77,8 @@ jobs:
             <key>CFBundleExecutable</key><string>bad-proxy-gui</string>
             <key>CFBundleIdentifier</key><string>icu.wwr.badproxy.gui</string>
             <key>CFBundlePackageType</key><string>APPL</string>
-            <key>CFBundleVersion</key><string>0.0.1-beta-1</string>
-            <key>CFBundleShortVersionString</key><string>0.0.1-beta-1</string>
+            <key>CFBundleVersion</key><string>0.0.1-beta-3</string>
+            <key>CFBundleShortVersionString</key><string>0.0.1-beta-3</string>
             <key>LSMinimumSystemVersion</key><string>11.0</string>
             <key>NSHighResolutionCapable</key><true/>
             <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>

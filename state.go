@@ -9,6 +9,11 @@ import (
 
 // Node is one upstream the user adds; it maps to a core outbound. Only one
 // node is active at a time and becomes the default (empty-tag) outbound.
+//
+// There is deliberately no plaintext field: the client always encrypts the hop
+// (tls transport, or xhttp over https) and verifies the certificate against the
+// system trust store. A node saved by an older build with "tls": false simply
+// loses that key, so it comes back encrypted.
 type Node struct {
 	Name      string `json:"name"`
 	Protocol  string `json:"protocol"` // btp, vless, trojan, socks
@@ -18,28 +23,36 @@ type Node struct {
 	Transport string `json:"transport"`
 	Path      string `json:"path"`      // xhttp request path
 	Authority string `json:"authority"` // SNI / Host, defaults to Server
-	TLS       bool   `json:"tls"`       // xhttp only: https vs http
 	Padding   string `json:"padding"`   // xhttp X-Padding range
+
+	// Deprecated: no longer read or written. Kept as a private field so that
+	// json.Unmarshal silently absorbs old "tls" keys instead of erroring out.
+	tlsLegacy bool `json:"-"`
 }
 
-// Routing modes are the presets the UI exposes. They are currently PLACEHOLDERS
-// — buildConfig always uses "global" — reserved for a later routing engine.
+// Routing modes are the presets the UI exposes. They only take effect in the
+// proxy/system proxy modes and split traffic by domain lists in rules.dat:
 //   - global:      every request leaves through the node.
-//   - cn-whitelist: mainland destinations direct, the rest through the node.
-//   - gfw-blacklist: blocked domains through the node, the rest direct.
+//   - cn-whitelist: mainland (cn list) domains direct, the rest through the node.
+//   - gfw-blacklist: non-mainland (geolocation-!cn list) domains through the
+//     node, the rest direct.
 const (
 	modeGlobal       = "global"
 	modeCNWhitelist  = "cn-whitelist"
 	modeGFWBlacklist = "gfw-blacklist"
 )
 
-// ProxyMode is the master switch (replaces the old Connect button):
-//   - off:    engine stopped, no OS proxy.
-//   - on:     engine running on the active node; apps use the local ports only.
-//   - system: engine running AND the OS system proxy points at those ports.
+// ProxyMode is the master switch. The engine ALWAYS runs from launch; the mode
+// only decides which default outbound it uses and whether the OS proxy is
+// pointed at it. There is no "off" state — "direct" is the idle state.
+//   - direct: engine runs on a built-in freedom outbound; all traffic direct.
+//   - proxy:  engine runs on the active node; apps use the local ports only.
+//   - system: like proxy, but the OS proxy is set to the local http inbound so
+//     apps route through it without manual configuration. Leaving system mode
+//     (and quitting while in it) clears that OS proxy again.
 const (
-	modeOff    = "off"
-	modeOn     = "on"
+	modeDirect = "direct"
+	modeProxy  = "proxy"
 	modeSystem = "system"
 )
 
@@ -58,11 +71,8 @@ type GUIState struct {
 }
 
 func defaultState() GUIState {
-	return GUIState{SocksPort: "10808", HttpPort: "10809", Active: -1, ProxyMode: modeOff, RoutingMode: modeGlobal}
+	return GUIState{SocksPort: "10808", HttpPort: "10809", Active: -1, ProxyMode: modeDirect, RoutingMode: modeGlobal}
 }
-
-// systemProxyWanted reports whether the OS proxy should be applied right now.
-func (s GUIState) systemProxyWanted() bool { return s.ProxyMode == modeSystem }
 
 // activeNode returns the selected node, or an error if none is selected.
 func (s GUIState) activeNode() (Node, error) {
@@ -75,11 +85,12 @@ func (s GUIState) activeNode() (Node, error) {
 // nodeFields says which optional node form fields are meaningful for a given
 // protocol+transport. It mirrors exactly what the core engine reads:
 //   - secret   -> used by btp/vless/trojan; the socks handshake ignores it.
-//   - tls      -> SNI (authority) only; no path/padding/https (TLS is implied).
-//   - xhttp    -> path, authority (Host), padding range, and the https toggle.
-//   - tcp      -> raw stream; nothing beyond host/port.
+//   - tls      -> SNI (authority) only. TLS is implied by the transport itself.
+//   - xhttp    -> path, authority (Host), padding range.
+//   - tcp      -> retired: it is cleartext, and the client offers no plaintext
+//     hop any more (see encryptedTransport).
 type nodeFields struct {
-	Secret, Authority, Path, Padding, HTTPS bool
+	Secret, Authority, Path, Padding bool
 }
 
 func visibleNodeFields(protocol, transport string) nodeFields {
@@ -91,25 +102,42 @@ func visibleNodeFields(protocol, transport string) nodeFields {
 		f.Authority = true
 		f.Path = true
 		f.Padding = true
-		f.HTTPS = true
 	}
 	return f
+}
+
+// encryptedTransport folds every transport value a node can carry onto one of
+// the two hops the client is willing to make: "tls" (TCP wrapped in TLS) or
+// "xhttp" over https. Raw tcp is cleartext, so it is not offered and any legacy
+// or blank value is migrated to tls, which reaches the same server the way
+// Xray's "tcp + security: tls" does.
+func encryptedTransport(transport string) string {
+	if transport == "xhttp" {
+		return "xhttp"
+	}
+	return "tls"
 }
 
 // normalize enforces the "always a default node" invariant: whenever at least
 // one node exists, Active points at a valid one (first node if unset/out of
 // range). With zero nodes it resets Active to -1.
 func (s *GUIState) normalize() {
-	if s.ProxyMode == "" {
-		s.ProxyMode = modeOff
+	// Backfill and migrate legacy/unknown values ("", "off", "on", the retired
+	// "clear" action) to direct, the always-on idle state.
+	switch s.ProxyMode {
+	case modeDirect, modeProxy, modeSystem:
+	default:
+		s.ProxyMode = modeDirect
 	}
-	// The "System proxy" mode only exists where applying it is supported; a
-	// stale preference from another platform falls back to plain "on".
-	if s.ProxyMode == modeSystem && !systemProxySupported {
-		s.ProxyMode = modeOn
-	}
-	if s.RoutingMode == "" {
+	switch s.RoutingMode {
+	case modeGlobal, modeCNWhitelist, modeGFWBlacklist:
+	default:
 		s.RoutingMode = modeGlobal
+	}
+	// Fold legacy tcp (and blank) transports onto tls before anything reads a
+	// node, so an old state file cannot dial a public server in the clear.
+	for i := range s.Nodes {
+		s.Nodes[i].Transport = encryptedTransport(s.Nodes[i].Transport)
 	}
 	if len(s.Nodes) == 0 {
 		s.Active = -1
@@ -126,15 +154,66 @@ func newStore(dir string) *store {
 	return &store{path: filepath.Join(dir, "state.json")}
 }
 
-// appConfigDir is where GUI state persists, independent of fyne's storage so a
-// plain Go build (and CI smoke test) can locate it without a running app.
+// newStoreFromConfigDir creates a store in the directory appConfigDir picks.
+func newStoreFromConfigDir() *store {
+	dir, err := appConfigDir()
+	if err != nil {
+		dir = "."
+	}
+	adoptLegacyState(dir)
+	return newStore(dir)
+}
+
+// appDirName is the per-user config folder name, and portableMarker is the
+// file that opts a Windows release folder into keeping its data beside the
+// executable.
+const (
+	appDirName     = "bad-proxy-gui"
+	portableMarker = ".portable"
+)
+
+// appConfigDir is where GUI state persists. A plain Go build (and CI smoke
+// test) can locate it without a running app.
 func appConfigDir() (string, error) {
+	if dir, ok := portableConfigDir(); ok {
+		return dir, nil
+	}
 	base, err := os.UserConfigDir()
 	if err != nil {
 		return "", err
 	}
-	dir := filepath.Join(base, "bad-proxy-gui")
+	dir := filepath.Join(base, appDirName)
 	return dir, os.MkdirAll(dir, 0o700)
+}
+
+// legacyConfigDir is the pre-portable home, %AppData%\bad-proxy-gui on Windows.
+func legacyConfigDir() (string, error) {
+	base, err := os.UserConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(base, appDirName), nil
+}
+
+// adoptLegacyState copies an existing install's state.json into a portable
+// folder that has none yet, so switching layouts does not look like losing
+// every node. Only the copy is made: %AppData% keeps its own state, and
+// rules.dat is deliberately not carried over — a stale dataset sitting next to
+// the exe would outrank the fresh one the release zip ships forever after.
+func adoptLegacyState(dir string) {
+	if _, err := os.Stat(filepath.Join(dir, "state.json")); err == nil {
+		return
+	}
+	from, err := legacyConfigDir()
+	if err != nil {
+		return
+	}
+	src := filepath.Join(from, "state.json")
+	b, err := os.ReadFile(src)
+	if err != nil {
+		return
+	}
+	_ = os.WriteFile(filepath.Join(dir, "state.json"), b, 0o600)
 }
 
 func (st *store) load() GUIState {
