@@ -31,7 +31,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: windows
-          path: dist/bad-proxy-gui-windows-amd64.zip
+          path: |
+            dist/bad-proxy-gui-windows-amd64.zip
+            dist/bad-proxy-gui-windows-amd64.exe
           if-no-files-found: error
 
   build-macos:
