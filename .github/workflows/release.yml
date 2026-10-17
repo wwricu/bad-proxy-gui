@@ -113,9 +113,11 @@ jobs:
           path: dist
           merge-multiple: true
       - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: dist/*
-          prerelease: true
-          generate_release_notes: true
-          fail_on_unmatched_files: false
+        # softprops/action-gh-release kept dying with "Too many retries." on a
+        # release object orphaned by tag deletion; gh's delete+create is both
+        # idempotent across re-tagged prereleases and immune to that state.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete "${GITHUB_REF_NAME}" --yes --cleanup-note || true
+          gh release create "${GITHUB_REF_NAME}" --prerelease --generate-notes dist/*
