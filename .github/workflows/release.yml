@@ -113,11 +113,39 @@ jobs:
           path: dist
           merge-multiple: true
       - name: Publish GitHub Release
-        # softprops/action-gh-release kept dying with "Too many retries." on a
-        # release object orphaned by tag deletion; gh's delete+create is both
-        # idempotent across re-tagged prereleases and immune to that state.
+        # Both softprops/action-gh-release ("Too many retries.") and gh CLI
+        # (exit 1, logs unseeable) failed publishing blind. Talk to the REST
+        # API directly and print every response body into the job log, so the
+        # next failure is diagnosable from the Actions page itself.
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AUTH: Bearer ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
         run: |
-          gh release delete "${GITHUB_REF_NAME}" --yes --cleanup-note || true
-          gh release create "${GITHUB_REF_NAME}" --prerelease --generate-notes dist/*
+          set -uo pipefail
+          API="https://api.github.com/repos/$GITHUB_REPOSITORY"
+          UP="https://uploads.github.com/repos/$GITHUB_REPOSITORY"
+          stale=$(curl -s -H "Authorization: $AUTH" "$API/releases/tags/$GITHUB_REF_NAME" | jq -r '.id // empty')
+          if [ -n "$stale" ]; then
+            echo "removing stale release $stale"
+            curl -s -X DELETE -H "Authorization: $AUTH" "$API/releases/$stale" > /dev/null
+          fi
+          resp=$(curl -s -X POST -H "Authorization: $AUTH" -H "Accept: application/vnd.github+json" \
+            -d "{\"tag_name\":\"$GITHUB_REF_NAME\",\"name\":\"$GITHUB_REF_NAME\",\"prerelease\":true,\"generate_release_notes\":true,\"target_commitish\":\"$GITHUB_SHA\"}" \
+            "$API/releases")
+          rid=$(echo "$resp" | jq -r '.id // empty')
+          if [ -z "$rid" ]; then
+            echo "release create failed:" >&2
+            echo "$resp" >&2
+            exit 1
+          fi
+          for f in dist/*; do
+            echo "uploading $(basename "$f")"
+            upt=$(curl -s -X POST -H "Authorization: $AUTH" -H "Content-Type: application/octet-stream" \
+              --data-binary "@$f" "$UP/releases/$rid/assets?name=$(basename "$f")")
+            if ! echo "$upt" | jq -e '.id' > /dev/null; then
+              echo "upload failed:" >&2
+              echo "$upt" >&2
+              exit 1
+            fi
+          done
+          echo "published release $rid"
