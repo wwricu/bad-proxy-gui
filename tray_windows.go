@@ -11,3 +11,10 @@ import (
 func startTray(onOpen, onQuit func()) {
 	systray.Run(func() { trayMenu(onOpen, onQuit) }, nil)
 }
+
+// addTrayQuit gives the Windows icon a right-click menu carrying only Quit;
+// left click reopens the window.
+func addTrayQuit(onQuit func()) {
+	quit := systray.AddMenuItem("Quit", "Quit Bad Proxy")
+	quit.Click(onQuit)
+}

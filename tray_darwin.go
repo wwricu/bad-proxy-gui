@@ -13,3 +13,11 @@ func startTray(onOpen, onQuit func()) {
 	start, _ := systray.RunWithExternalLoop(func() { trayMenu(onOpen, onQuit) }, nil)
 	start()
 }
+
+// addTrayQuit keeps the menu-bar icon menu-free on macOS, matching the
+// behaviour the user signed off on: the right click must pop nothing. A
+// registered (silent) OnRClick handler is what suppresses the library's
+// default "right click shows the menu". Quit lives in the app menu (Cmd+Q).
+func addTrayQuit(onQuit func()) {
+	systray.SetOnRClick(func(systray.IMenu) {})
+}

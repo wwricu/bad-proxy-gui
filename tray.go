@@ -5,13 +5,13 @@ import (
 )
 
 // trayMenu builds the menu-bar / notification-area icon: a left-click or
-// double-click reopens the window; the menu itself only carries Quit.
+// double-click reopens the window; what the right-click does is platform
+// policy (addTrayQuit).
 func trayMenu(onOpen, onQuit func()) {
 	systray.SetIcon(trayIconBytes)
 	systray.SetTitle("Bad Proxy")
 	systray.SetTooltip("Bad Proxy")
 	systray.SetOnClick(func(systray.IMenu) { onOpen() })
 	systray.SetOnDClick(func(systray.IMenu) { onOpen() })
-	quit := systray.AddMenuItem("Quit", "Quit Bad Proxy")
-	quit.Click(onQuit)
+	addTrayQuit(onQuit)
 }
