@@ -13,18 +13,22 @@ stage="dist/stage/$app"
 out="dist/$app-windows-amd64.zip"
 
 prepare_rules() {
-    # Same source core/build.sh uses. The dataset is also embedded in the
-    # binary, so a failed download only costs the shipped copy - the app
-    # materialises its own on first run. Never abort the build over it.
+    # go:embed rules.dat needs the file to exist at build time, so this must
+    # run before wails build. Prefer the fresh upstream dataset; an empty
+    # placeholder still compiles and only costs the sealed copy - the portable
+    # zip ships rules.dat beside the exe anyway.
     if [ -s "$rules" ]; then
         return 0
     fi
     local url="https://github.com/wwricu/domain-list-community/releases/latest/download/$rules"
     curl -fsSL -o "$rules" "$url" || rm -f "$rules"
     if [ ! -s "$rules" ]; then
-        echo "WARNING: $rules unavailable; shipping without it (embedded copy still routes)" >&2
+        echo "WARNING: $rules unavailable; embedding an empty placeholder" >&2
+        : > "$rules"
     fi
 }
+
+prepare_rules
 
 rm -rf dist/stage
 mkdir -p "$stage"
