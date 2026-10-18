@@ -6,7 +6,7 @@
          Full bleed on purpose. The Wails default shipped a small white tile
          with a drop shadow floating in a transparent canvas, which reads as a
          postage stamp on the taskbar and in the Dock. -->
-    <rect width="1024" height="1024" rx="200" fill="#2f6f9f"/>
+    <rect width="1024" height="1024" rx="200" fill="#000000"/>
     <text x="535" y="495" text-anchor="middle" dominant-baseline="central"
           font-family="'Arial Black', 'Segoe UI Black', sans-serif" font-weight="900"
           font-size="740" fill="#ffffff">B</text>
