@@ -25,7 +25,7 @@ wintun_sha256="07c256185d6ee3652e09fa55c0b673e2624b565e02c4b9091c79ca7d2f24ef51"
 
 prepare_rules() {
     # go:embed rules.dat needs the file to exist at build time, so this must
-    # run before wails build. Prefer the fresh upstream dataset; an empty
+    # run before the build. Prefer the fresh upstream dataset; an empty
     # placeholder still compiles and only costs the sealed copy - the portable
     # zip ships rules.dat beside the exe anyway.
     if [ -s "$rules" ]; then
@@ -66,12 +66,40 @@ prepare_wintun() {
     rm -rf "$x"
 }
 
+prepare_syso() {
+    # The icon, the version resource and - above all - the per-monitor DPI
+    # manifest live in a .syso that the Go linker picks up from the package
+    # directory. wails3 generates it from build/windows/ and wails.json; with
+    # it missing the exe still runs, it is just blurry on a scaled display.
+    local syso="${app}_windows_amd64.syso"
+    rm -f "$syso"
+    if ! command -v wails3 > /dev/null 2>&1; then
+        echo "WARNING: wails3 CLI not found; building without the icon/DPI manifest" >&2
+        return 0
+    fi
+    wails3 generate syso -arch amd64 \
+        -icon build/windows/icon.ico \
+        -info build/windows/info.json \
+        -manifest build/windows/wails.exe.manifest \
+        -out "$syso" || {
+        echo "WARNING: could not generate $syso" >&2
+        rm -f "$syso"
+    }
+}
+
 prepare_rules
 
 rm -rf dist/stage
 mkdir -p "$stage"
 
-wails build -platform windows/amd64 2>&1 | tail -3
+# v3's CLI builds through a Taskfile the app does not need: the frontend is
+# plain files that //go:embed already carries, so the build is a go build with
+# the two flags that matter - the production tag (without it the asset server is
+# a stub) and the windowsgui subsystem (without it a console opens beside the
+# window).
+prepare_syso
+mkdir -p build/bin
+go build -tags production -trimpath -ldflags "-s -w -H windowsgui" -o "build/bin/$app.exe" .
 cp "build/bin/$app.exe" "$stage/"
 cp "build/bin/$app.exe" "$single"
 

@@ -21,8 +21,10 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: Install Wails CLI
-        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.16.0
+      - name: Install the Wails v3 CLI
+        # Only for `wails3 generate syso`, which builds the icon/DPI-manifest
+        # resource. Pin it to the library version in go.mod.
+        run: go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.31
       - name: Point core replace at the in-workspace checkout
         run: go mod edit -replace github.com/wwricu/bad-proxy-core=./bad-proxy-core
       - name: Build portable bundle
