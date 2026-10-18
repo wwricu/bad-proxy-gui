@@ -3,7 +3,7 @@ module github.com/wwricu/bad-proxy-gui
 go 1.26.3
 
 require (
-	github.com/wwricu/bad-proxy-core v0.0.0
+	github.com/wwricu/bad-proxy-core v1.1.1-0.20261016202921-696c9ce75c51
 	github.com/xjasonlyu/tun2socks/v2 v2.7.0
 	golang.org/x/sys v0.48.0
 	golang.zx2c4.com/wireguard v0.0.0-20261006164505-2631ce99a06f
@@ -27,5 +27,3 @@ require (
 	golang.org/x/time v0.15.0 // indirect
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
 )
-
-replace github.com/wwricu/bad-proxy-core => ../bad-proxy-core

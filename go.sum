@@ -26,6 +26,8 @@ github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
 github.com/wailsapp/wails/v3 v3.0.0-beta.31 h1:JquV/SynfuKvkzev1OmDXz+ta64gcZaEb8CeTkb8S2I=
 github.com/wailsapp/wails/v3 v3.0.0-beta.31/go.mod h1:Tk3i8pyehpIdV4aS9GfpgGjk7eOjuSpCrpyJXpS6y64=
+github.com/wwricu/bad-proxy-core v1.1.1-0.20261016202921-696c9ce75c51 h1:513AcHp0yh1wjm3YWMWiDSwx3hmwnf9nn8N6yWVEvuI=
+github.com/wwricu/bad-proxy-core v1.1.1-0.20261016202921-696c9ce75c51/go.mod h1:SeA0286o21CeY0E1oL2WMpBy+b4TgbRLp5S/G+Qtpt8=
 github.com/xjasonlyu/tun2socks/v2 v2.7.0 h1:fYEN0Q1sSanuoID8xvUTsMODbKLJJH/J5ywYoMRxIPw=
 github.com/xjasonlyu/tun2socks/v2 v2.7.0/go.mod h1:XHgJ3wbs63mZxGbJawt6jjNX65aPDl+Qhn2ePPEE4KI=
 golang.org/x/exp v0.0.0-20260611194520-c48552f49976 h1:X8Hz2ImujgbmetVuW+w2YkyZChE3cBpZi2P158rTG9M=
