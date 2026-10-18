@@ -1,7 +1,6 @@
 import { API } from './bridge.js';
+import { Events } from "/wails/runtime.js";
 import * as sheet from './sheet.js';
-import { openNodeSheet } from './node.js';
-import { openSettingsSheet } from './settings.js';
 
 let state = null;
 let platformInfo = null;
@@ -184,23 +183,35 @@ document.getElementById('ctxDelete').onclick = () => {
 
 // ---- forms ----
 
-// Both forms are sheets over this window, opened here and written through the
-// same bound methods this page would have used.
-document.getElementById('addNodeBtn').onclick = () => openNodeSheet(-1);
-document.getElementById('gearBtn').onclick = openSettingsSheet;
-
-function editNode(idx) {
-    openNodeSheet(idx);
+// The editor and the settings form are windows of their own, so opening one is
+// a call into the backend, which is also what keeps a second copy from
+// stacking up. Their writes go through the same bound methods this page uses.
+async function openForm(fn, ...args) {
+    try {
+        await API()[fn](...args);
+    } catch (err) {
+        setStatus('Window failed: ' + err.message);
+    }
 }
 
-// A sheet writes the state this page displays, so closing one is the signal to
-// reread. Test results are dropped with it: applying settings restarts the
-// engine, so the last latency is no longer a measurement of what is running.
-sheet.onSheetClosed(() => {
-    pendingDelete = -1;
+document.getElementById('addNodeBtn').onclick = () => openForm('AddNodeUI');
+document.getElementById('gearBtn').onclick = () => openForm('SettingsUI');
+
+function editNode(idx) {
+    openForm('EditNodeUI', idx);
+}
+
+// A form window writes the state this page displays, and the backend signals
+// the window closing, so that is the signal to reread. Test results are dropped
+// with it: applying settings restarts the engine, so the last latency is no
+// longer a measurement of what is running.
+Events.On('state-changed', () => {
     nodeResults = {};
     loadState().catch((err) => setStatus('Load failed: ' + err.message));
 });
+
+// The delete card is the one form that stays inside this window.
+sheet.onSheetClosed(() => { pendingDelete = -1; });
 
 // ---- nodes ----
 

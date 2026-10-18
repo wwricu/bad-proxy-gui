@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings</title>
+    <link rel="stylesheet" href="src/style.css">
+</head>
+<body class="form-page">
+    <div class="sheet form-window">
+        <div class="sheet-body">
+            <div class="form-grid">
+                <label>HTTP port</label><input type="text" id="sHttpPort">
+                <label>SOCKS port</label><input type="text" id="sSocksPort">
+                <label>Mode</label>
+                <select id="sMode">
+                    <option value="direct">Direct</option>
+                    <option value="proxy">Proxy</option>
+                    <option value="system">System proxy</option>
+                </select>
+                <label>Routing</label>
+                <select id="sRouting">
+                    <option value="global">Global</option>
+                    <option value="cn-whitelist">Bypass CN</option>
+                    <option value="gfw-blacklist">Bypass GFW</option>
+                </select>
+            </div>
+            <div class="check-grid">
+                <div class="checkbox-row">
+                    <input type="checkbox" id="sLAN">
+                    <label for="sLAN">Allow LAN access</label>
+                </div>
+                <div class="checkbox-row" id="sLoginRow" style="display:none;">
+                    <input type="checkbox" id="sLogin">
+                    <label for="sLogin">Start at login</label>
+                </div>
+                <div class="checkbox-row" id="sTrayRow" style="display:none;">
+                    <input type="checkbox" id="sTray">
+                    <label for="sTray">Hide tray icon (after restart)</label>
+                </div>
+            </div>
+            <!-- Where an OK that did not take effect says why, beside the box
+                 that caused it. -->
+            <div id="sMsg" class="form-msg" aria-live="polite"></div>
+        </div>
+        <div class="sheet-actions">
+            <button id="settingsCancel" class="btn-secondary">Cancel</button>
+            <button id="settingsOK" class="btn-primary">OK</button>
+        </div>
+    </div>
+
+    <script type="module" src="/wails/runtime.js"></script>
+    <script type="module" src="src/settings.js"></script>
+</body>
+</html>

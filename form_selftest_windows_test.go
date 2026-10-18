@@ -22,10 +22,11 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/events"
 )
 
-// Drives the app the way the buttons do, checks what the page actually
-// rendered, and writes a screenshot of each state. The forms are sheets inside
-// the one window now, so every probe goes to that window and every step starts
-// from a real click on a real control.
+// Drives the app the way the buttons do, checks what each page actually
+// rendered, and writes a screenshot of every window. The node editor and the
+// settings form are webview windows of their own, so the harness holds several
+// windows at once and probes each one by itself; the delete confirmation stays
+// inside the main window and is probed there.
 //
 //	BADPROXY_GUI_SELFTEST=1 go test -tags production -run TestFormWindows -count=1 -v
 //
@@ -188,17 +189,17 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 		["roHttp","roSocks","roMode","roRouting"].map(id => {
 			const el = document.getElementById(id);
 			return id + "=" + el.tagName + ":" + el.textContent;
-		}).join(" ") + " | closed=" +
-		(document.getElementById("nodeSheet").hidden && document.getElementById("settingsSheet").hidden)`)
+		}).join(" ") + " | forms=" +
+		(document.getElementById("nodeSheet") === null && document.getElementById("settingsSheet") === null)`)
 	c.check(strings.Contains(readouts, "roHttp=SPAN:11909"), "the bar shows the HTTP port as text: %q", readouts)
 	c.check(strings.Contains(readouts, "roSocks=SPAN:11908"), "the bar shows the SOCKS port as text")
 	c.check(strings.Contains(readouts, "roMode=SPAN:Direct"), "the bar names the mode in words")
-	c.check(strings.Contains(readouts, "closed=true"), "both sheets start closed")
+	c.check(strings.Contains(readouts, "forms=true"), "the form sheets are gone from the list window")
 
 	// The minimum size is what the layout has to survive: the bar's three zones
-	// stay reachable and the tallest sheet fits without a scrollbar. The readouts
-	// are measured with the longest words they can hold, because "Direct" is not
-	// what sets the width.
+	// stay reachable and the delete card still fits. The readouts are measured
+	// with the longest words they can hold, because "Direct" is not what sets
+	// the width.
 	win.SetSize(mainWindowMinW, mainWindowMinH)
 	time.Sleep(800 * time.Millisecond)
 	fits := probe(win, probes, `
@@ -256,47 +257,54 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 	c.shot(win, "main-minimum")
 
 	// ---- the node editor ----
-	// The click is the whole entry point; the sheet appears in this window.
+	// The click is the whole entry point: it goes through a binding and the
+	// backend opens a window.
 	probe(win, probes, `(() => { document.getElementById("addNodeBtn").click(); return "sent"; })()`)
-	opened := probeUntil(win, probes, `document.getElementById("nodeSheet").hidden`,
-		func(s string) bool { return s == "false" }, 5*time.Second)
-	if opened != "false" {
-		c.fail("the add button never opened the editor")
+	node := waitForm(a, nodeWindowPrefix+"new", 5*time.Second)
+	if node == nil {
+		c.fail("the add button never opened the editor window")
 		a.quit()
 		return
 	}
-	c.ok("the add button opened the editor in the same window")
-	fields := probe(win, probes, `
+	c.ok("the add button opened the editor in a window of its own")
+	// PrintWindow on a window that has only just been shown comes out black: the
+	// page is loaded (the probe above answered) but the compositor has not drawn
+	// a frame yet, so give it one before asking for the pixels.
+	time.Sleep(1500 * time.Millisecond)
+	fields := probe(node, probes, `
 		(() => {
 			const shown = (id) => getComputedStyle(document.getElementById(id)).display !== "none";
-			const body = document.querySelector("#nodeSheet .sheet-body");
-			const r = document.querySelector("#nodeSheet .sheet").getBoundingClientRect();
+			const body = document.querySelector(".sheet-body");
+			const last = Math.max(...[...document.querySelectorAll(".sheet-body *")]
+				.map((el) => el.getBoundingClientRect().bottom).filter((y) => y > 0));
 			return {shown: ["fSecret","fAuthority","fPath","fPadding"].filter(shown),
-					title: document.getElementById("nodeSheetTitle").textContent,
 					scroll: body.scrollHeight > body.clientHeight,
-					sheet: [Math.round(r.width), Math.round(r.height)],
-					room: body.clientHeight};
+					gap: Math.round(document.querySelector(".sheet-actions").getBoundingClientRect().top - last),
+					inner: [window.innerWidth, window.innerHeight]};
 		})()`)
 	c.check(strings.Contains(fields, `"fSecret","fAuthority","fPath","fPadding"`),
 		"xhttp offers every optional field: %s", fields)
-	c.check(strings.Contains(fields, `"title":"Add node"`), "the sheet says what it is: %s", fields)
 	c.check(strings.Contains(fields, `"scroll":false`),
-		"the tallest form needs no scrollbar at the minimum window size: %s", fields)
-	c.shot(win, "node-add")
+		"the tallest form needs no scrollbar: %s", fields)
+	// The window is the form: the buttons sit just under the last field, so a
+	// fixed-size dialog never shows a band of empty window in its middle.
+	c.check(gapOf(fields) <= 32, "no dead band above the editor's buttons: %s", fields)
+	fmt.Printf("  form   node editor: %s\n", fields)
+	c.shot(node, "node-add")
 
 	// A protocol that hides a row has to take the buttons with it: the form
 	// flows from the top, so the spare room belongs under the actions, not in
 	// the middle of the fields.
-	trimmed := probe(win, probes, `
+	trimmed := probe(node, probes, `
 		(() => {
 			const sel = document.getElementById("fProtocol");
 			sel.value = "socks";
 			sel.dispatchEvent(new Event("change"));
 			const hidden = (id) => getComputedStyle(document.getElementById(id)).display === "none";
-			const actions = document.querySelector("#nodeSheet .sheet-actions").getBoundingClientRect();
-			const body = document.querySelector("#nodeSheet .sheet-body");
+			const actions = document.querySelector(".sheet-actions").getBoundingClientRect();
+			const body = document.querySelector(".sheet-body");
 			const out = {hidden: ["fSecret","fAuthority","fPath","fPadding"].filter(hidden),
-					fits: actions.bottom <= window.innerHeight,
+					fits: actions.bottom <= window.innerHeight + 1,
 					scroll: body.scrollHeight > body.clientHeight};
 			sel.value = "vless";
 			sel.dispatchEvent(new Event("change"));
@@ -304,29 +312,49 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 		})()`)
 	c.check(strings.Contains(trimmed, `"hidden":["fSecret"]`), "socks hides only the secret: %s", trimmed)
 	c.check(strings.Contains(trimmed, `"fits":true`) && strings.Contains(trimmed, `"scroll":false`),
-		"a shorter form keeps its buttons in view: %s", trimmed)
+		"a shorter form keeps its buttons inside the window: %s", trimmed)
 
 	// The validation is synchronous, so the click and the read are one pass.
-	refusal := probe(win, probes, `
+	refusal := probe(node, probes, `
 		(() => {
 			document.getElementById("modalSave").click();
 			return document.getElementById("fMsg").textContent;
 		})()`)
 	c.check(strings.Contains(refusal, "required"), "an empty form refuses in its own line: %q", refusal)
-	c.check(strings.Contains(probe(win, probes, `document.getElementById("nodeSheet").hidden`), "false"),
-		"a refused save leaves the editor open")
+	c.check(a.formByName(nodeWindowPrefix+"new") != nil, "a refused save leaves the editor open")
 
-	probe(win, probes, `
+	// Cancel is the way out that writes nothing - the check the sheet could only
+	// make about a hidden div.
+	before := stateFromFile(dir)
+	probe(node, probes, `(() => { document.getElementById("modalCancel").click(); return "sent"; })()`)
+	c.check(waitClosed(a, nodeWindowPrefix+"new", 5*time.Second), "Cancel closes the editor")
+	c.check(len(stateFromFile(dir).Nodes) == len(before.Nodes), "a cancelled editor wrote nothing")
+
+	probe(win, probes, `(() => { document.getElementById("addNodeBtn").click(); return "sent"; })()`)
+	node = waitForm(a, nodeWindowPrefix+"new", 5*time.Second)
+	if node == nil {
+		c.fail("the add button never reopened the editor")
+		a.quit()
+		return
+	}
+	// A window exists the moment the backend creates it and has a page some
+	// seconds later, so a script the page cannot answer with is sent again until
+	// it can. The page is only ready once its own fill has run, which for a new
+	// node is the transport select settling on xhttp.
+	ready := probeUntil(node, probes, `document.getElementById("fTransport") &&
+		document.getElementById("fTransport").value`,
+		func(s string) bool { return s == "xhttp" }, 20*time.Second)
+	c.check(ready == "xhttp", "the reopened editor finished its own fill: %q", ready)
+	filled := probeUntil(node, probes, `
 		(() => {
 			const set = (id, v) => { document.getElementById(id).value = v; };
 			set("fName","gamma"); set("fServer","gamma.example.invalid"); set("fPort","2053");
 			set("fSecret","synthetic-2"); set("fAuthority","gamma.example.invalid");
-			document.getElementById("modalSave").click();
-			return "sent";
-		})()`)
-	closed := probeUntil(win, probes, `document.getElementById("nodeSheet").hidden`,
-		func(s string) bool { return s == "true" }, 8*time.Second)
-	c.check(closed == "true", "a good save closes the editor")
+			return "done";
+		})()`, func(s string) bool { return s == "done" }, 10*time.Second)
+	c.check(filled == "done", "the reopened editor took the draft: %q", filled)
+	probe(node, probes, `(() => { document.getElementById("modalSave").click(); return "sent"; })()`)
+	c.check(waitClosed(a, nodeWindowPrefix+"new", 8*time.Second), "a good save closes the editor")
 	c.check(len(stateFromFile(dir).Nodes) == 2, "the new node reached state.json: %d nodes", len(stateFromFile(dir).Nodes))
 	rows := probeUntil(win, probes, `document.querySelectorAll(".node-item").length`,
 		func(s string) bool { return s == "2" }, 8*time.Second)
@@ -352,57 +380,98 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 		"the reason is kept, on the chip: %q", shown.Reason)
 	c.shot(win, "node-failed")
 
-	// ---- the settings sheet ----
+	// ---- the settings window ----
 	probe(win, probes, `(() => { document.getElementById("gearBtn").click(); return "sent"; })()`)
-	// The sheet fills itself from two bindings, so the read has to wait for the
-	// draft to land rather than read the empty form it starts with.
-	prefill := probeUntil(win, probes, `
+	settings := waitForm(a, settingsWindowName, 5*time.Second)
+	if settings == nil {
+		c.fail("the gear never opened the settings window")
+		a.quit()
+		return
+	}
+	// The page fills itself from two bindings, so the read has to wait for the
+	// draft to land rather than read the empty form the window starts with.
+	prefill := probeUntil(settings, probes, `
 		(() => ({
-			open: document.getElementById("settingsSheet").hidden === false,
 			ports: ["sHttpPort","sSocksPort"].map(id => document.getElementById(id).value).join("/"),
 			mode: document.getElementById("sMode").value,
 			loginRow: getComputedStyle(document.getElementById("sLoginRow")).display,
-			scroll: document.querySelector("#settingsSheet .sheet-body").scrollHeight >
-			        document.querySelector("#settingsSheet .sheet-body").clientHeight,
+			scroll: document.querySelector(".sheet-body").scrollHeight >
+			        document.querySelector(".sheet-body").clientHeight,
+			gap: (() => {
+				const last = Math.max(...[...document.querySelectorAll(".sheet-body *")]
+					.map((el) => el.getBoundingClientRect().bottom).filter((y) => y > 0));
+				return Math.round(document.querySelector(".sheet-actions").getBoundingClientRect().top - last);
+			})(),
+			inner: [window.innerWidth, window.innerHeight],
 		}))()`, func(s string) bool { return strings.Contains(s, `"ports":"11909/11908"`) }, 10*time.Second)
-	c.check(strings.Contains(prefill, `"open":true`), "the gear opened the settings sheet in the same window")
 	c.check(strings.Contains(prefill, `"mode":"direct"`), "settings opens with the saved mode")
 	c.check(strings.Contains(prefill, `"loginRow":"flex"`), "the start-at-login row is offered on Windows")
 	c.check(strings.Contains(prefill, `"scroll":false`), "the settings form needs no scrollbar: %s", prefill)
-	c.shot(win, "settings")
+	c.check(gapOf(prefill) <= 32, "no dead band above the settings buttons: %s", prefill)
+	fmt.Printf("  form   settings: %s\n", prefill)
+	time.Sleep(1200 * time.Millisecond)
+	c.shot(settings, "settings")
 
-	// Equal ports: the refusal belongs on this sheet's message line, and the
-	// sheet has to stay so the draft can be fixed.
-	probe(win, probes, `
+	// Equal ports: the refusal belongs on this window's message line, and the
+	// window has to stay so the draft can be fixed.
+	probe(settings, probes, `
 		(() => {
 			document.getElementById("sSocksPort").value = "11909";
 			document.getElementById("settingsOK").click();
 			return "sent";
 		})()`)
-	errText := probeUntil(win, probes, `document.getElementById("sMsg").textContent`,
+	errText := probeUntil(settings, probes, `document.getElementById("sMsg").textContent`,
 		func(s string) bool { return strings.Contains(s, "differ") }, 10*time.Second)
-	c.check(strings.Contains(errText, "differ"), "a bad draft is reported inside the settings sheet: %q", errText)
-	c.check(strings.Contains(probe(win, probes, `document.getElementById("settingsSheet").hidden`), "false"),
-		"a refused draft leaves the settings sheet open")
+	c.check(strings.Contains(errText, "differ"), "a bad draft is reported inside the settings window: %q", errText)
+	c.check(a.formByName(settingsWindowName) != nil, "a refused draft leaves the settings window open")
 	c.check(stateFromFile(dir).SocksPort == "11908", "a refused draft did not reach state.json")
 
-	// A good draft closes the sheet and reaches both the file and the bar.
-	probe(win, probes, `
+	// A good draft closes the window and reaches both the file and the bar.
+	probe(settings, probes, `
 		(() => {
 			document.getElementById("sHttpPort").value = "11911";
 			document.getElementById("sSocksPort").value = "11910";
 			document.getElementById("settingsOK").click();
 			return "sent";
 		})()`)
-	closed = probeUntil(win, probes, `document.getElementById("settingsSheet").hidden`,
-		func(s string) bool { return s == "true" }, 15*time.Second)
-	c.check(closed == "true", "a good draft closes the settings sheet")
+	c.check(waitClosed(a, settingsWindowName, 15*time.Second), "a good draft closes the settings window")
 	applied := stateFromFile(dir)
 	c.check(applied.HttpPort == "11911" && applied.SocksPort == "11910",
 		"OK applied the draft: %s/%s", applied.HttpPort, applied.SocksPort)
 	after := probeUntil(win, probes, `document.getElementById("roHttp").textContent`,
 		func(s string) bool { return s == "11911" }, 8*time.Second)
 	c.check(after == "11911", "the bar followed the applied setting: %q", after)
+
+	// Two clicks on the same action leave one window, not two writers of the
+	// same draft stacked on top of each other.
+	probe(win, probes, `(() => { document.getElementById("gearBtn").click(); return "sent"; })()`)
+	if waitForm(a, settingsWindowName, 5*time.Second) == nil {
+		c.fail("the gear never reopened the settings window")
+	}
+	probe(win, probes, `(() => { document.getElementById("gearBtn").click(); return "sent"; })()`)
+	time.Sleep(1200 * time.Millisecond)
+	c.check(countForms(a, settingsWindowName) == 1,
+		"the gear pressed twice leaves one settings window: %d", countForms(a, settingsWindowName))
+	probe(win, probes, `(() => { document.getElementById("addNodeBtn").click(); return "sent"; })()`)
+	if waitForm(a, nodeWindowPrefix+"new", 5*time.Second) == nil {
+		c.fail("the plus never reopened the editor while another form was open")
+	}
+	time.Sleep(600 * time.Millisecond)
+	c.check(countForms(a, nodeWindowPrefix) == 1,
+		"the plus pressed twice leaves one editor: %d", countForms(a, nodeWindowPrefix))
+	probe(win, probes, `(() => { document.getElementById("addNodeBtn").click(); return "sent"; })()`)
+	time.Sleep(600 * time.Millisecond)
+	c.check(countForms(a, nodeWindowPrefix) == 1,
+		"and it is still one after a third click: %d", countForms(a, nodeWindowPrefix))
+	// Close both again so the list is the only thing left, which is what the
+	// remaining steps assume.
+	if w := a.formByName(nodeWindowPrefix + "new"); w != nil {
+		w.Close()
+	}
+	if w := a.formByName(settingsWindowName); w != nil {
+		w.Close()
+	}
+	time.Sleep(800 * time.Millisecond)
 
 	// ---- clicking the list ----
 	// A row is the only thing on the main page that writes, so both of its
@@ -420,27 +489,27 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 	time.Sleep(600 * time.Millisecond)
 	probe(win, probes, `
 		(() => { document.querySelectorAll(".node-item")[0].dispatchEvent(new MouseEvent("dblclick", {bubbles: true})); return "sent"; })()`)
-	saved := probeUntil(win, probes, `
-		(() => ({title: document.getElementById("nodeSheetTitle").textContent,
-				name: document.getElementById("fName").value,
-				server: document.getElementById("fServer").value}))()`,
-		func(s string) bool { return strings.Contains(s, "alpha") }, 8*time.Second)
-	c.check(strings.Contains(saved, `"title":"Edit node"`) && strings.Contains(saved, `"name":"alpha"`) &&
-		strings.Contains(saved, `"server":"alpha.example.invalid"`),
-		"a double click opens the editor prefilled with that node: %s", saved)
-	c.shot(win, "node-edit")
-
-	// Esc is the third way out, and it must not half-close: the sheet goes and
-	// nothing is written.
-	before := stateFromFile(dir)
-	probe(win, probes, `
-		(() => { document.getElementById("fName").value = "typo";
-			document.dispatchEvent(new KeyboardEvent("keydown", {key: "Escape", bubbles: true}));
-			return "sent"; })()`)
-	esc := probeUntil(win, probes, `document.getElementById("nodeSheet").hidden`,
-		func(s string) bool { return s == "true" }, 5*time.Second)
-	c.check(esc == "true", "Esc dismisses the sheet")
-	c.check(len(stateFromFile(dir).Nodes) == len(before.Nodes), "a dismissed sheet wrote nothing")
+	edit := waitForm(a, nodeWindowPrefix+"0", 8*time.Second)
+	if edit == nil {
+		c.fail("a double click never opened the editor for that node")
+	} else {
+		saved := probeUntil(edit, probes, `
+			(() => ({name: document.getElementById("fName").value,
+					server: document.getElementById("fServer").value}))()`,
+			func(s string) bool { return strings.Contains(s, "alpha") }, 8*time.Second)
+		c.check(strings.Contains(saved, `"name":"alpha"`) &&
+			strings.Contains(saved, `"server":"alpha.example.invalid"`),
+			"a double click opens the editor prefilled with that node: %s", saved)
+		time.Sleep(1200 * time.Millisecond)
+		c.shot(edit, "node-edit")
+		// Typing into it and walking away is the case a fixed window has to
+		// survive: the cross closes the window, not the app.
+		probe(edit, probes, `
+			(() => { document.getElementById("fName").value = "typo";
+				document.getElementById("modalCancel").click(); return "sent"; })()`)
+		c.check(waitClosed(a, nodeWindowPrefix+"0", 5*time.Second), "Cancel closes the editor for that node")
+		c.check(stateFromFile(dir).Nodes[0].Name == "alpha", "a cancelled edit renamed nothing")
+	}
 
 	// ---- deleting a node ----
 	// The confirmation is a card in this window because the OS one brought a
@@ -479,6 +548,9 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 	c.check(ask.Card[0]-widest <= 34 && ask.Card[0] >= widest,
 		"the card hugs its content: %d wide against %d of text and %d of buttons", ask.Card[0], ask.Text, ask.Btns)
 	c.check(ask.Card[1] < 130, "the card is short: %d px tall", ask.Card[1])
+	// Same reason as the form windows: the card is in the DOM (the probe read
+	// it) but the compositor has not necessarily drawn it yet.
+	time.Sleep(600 * time.Millisecond)
 	c.shot(win, "delete-ask")
 
 	probe(win, probes, `(() => { document.getElementById("deleteCancel").click(); return "sent"; })()`)
@@ -556,6 +628,57 @@ func render(v any) string {
 		return fmt.Sprintf("%v", v)
 	}
 	return string(b)
+}
+
+// ---- form windows ----
+
+// gapOf is the space a form page reports between its last visible field and its
+// buttons. It is the one number that says the window is the form.
+func gapOf(probeJSON string) int {
+	var out struct {
+		Gap int `json:"gap"`
+	}
+	_ = json.Unmarshal([]byte(probeJSON), &out)
+	return out.Gap
+}
+
+// waitForm polls until a window with the given name exists. The click that
+// opens one goes through a binding, so the window appears some time after the
+// probe that sent the click.
+func waitForm(a *App, name string, limit time.Duration) application.Window {
+	deadline := time.Now().Add(limit)
+	for time.Now().Before(deadline) {
+		if w := a.formByName(name); w != nil {
+			return w
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return nil
+}
+
+// waitClosed polls the other way: a form window finishes its work by closing,
+// and the save or apply that let it do so is the slow part.
+func waitClosed(a *App, name string, limit time.Duration) bool {
+	deadline := time.Now().Add(limit)
+	for time.Now().Before(deadline) {
+		if a.formByName(name) == nil {
+			return true
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return false
+}
+
+// countForms is how many open windows carry a name from one form's namespace.
+// Two of them would be two drafts writing the same state behind each other.
+func countForms(a *App, prefix string) int {
+	n := 0
+	for _, w := range a.wails.Window.GetAll() {
+		if strings.HasPrefix(w.Name(), prefix) {
+			n++
+		}
+	}
+	return n
 }
 
 func stateFromFile(dir string) GUIState {

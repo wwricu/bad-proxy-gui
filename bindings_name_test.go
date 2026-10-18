@@ -29,9 +29,9 @@ func TestBindingNamesMatchTheFrontend(t *testing.T) {
 
 	methods := reflect.TypeOf(&App{})
 	for _, name := range []string{
-		"AddNode", "ApplySettings", "DeleteNode",
+		"AddNode", "AddNodeUI", "ApplySettings", "DeleteNode", "EditNodeUI",
 		"GetPlatformInfo", "GetState", "SelectNode",
-		"SettingsDraft", "ShowContextMenu", "TestNode", "UpdateNode",
+		"SettingsDraft", "SettingsUI", "ShowContextMenu", "TestNode", "UpdateNode",
 	} {
 		if _, ok := methods.MethodByName(name); !ok {
 			t.Errorf("*App has no method %s, which the frontend calls as %s%s", name, prefix, name)

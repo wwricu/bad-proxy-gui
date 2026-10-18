@@ -1,10 +1,15 @@
 import { API } from './bridge.js';
-import * as sheet from './sheet.js';
+import { Window } from "/wails/runtime.js";
 
-// The editor for one node, as a sheet over the list. The draft is this sheet's
-// own; Save is the only write.
+// The editor for one node, in a window of its own. Which node is in the URL:
+// ?index=N edits that entry, no index means a new one. The draft is this
+// window's own; Save is the only write.
 
-let editIdx = -1;
+const editIdx = (() => {
+    const raw = new URL(location.href).searchParams.get('index');
+    const n = raw === null ? -1 : parseInt(raw, 10);
+    return Number.isInteger(n) ? n : -1;
+})();
 
 function setFormMsg(text) {
     document.getElementById('fMsg').textContent = text || '';
@@ -31,9 +36,9 @@ function applyFieldVisibility() {
     setRow('lPadding', 'fPadding', f.padding);
 }
 
-async function fill(index) {
+async function init() {
     const state = await API().GetState();
-    const n = index < 0 ? {} : (state.nodes || [])[index] || {};
+    const n = editIdx < 0 ? {} : (state.nodes || [])[editIdx] || {};
     document.getElementById('fName').value = n.name || '';
     document.getElementById('fProtocol').value = n.protocol || 'vless';
     document.getElementById('fServer').value = n.server || '';
@@ -47,19 +52,9 @@ async function fill(index) {
     document.getElementById('fName').focus();
 }
 
-export function openNodeSheet(index) {
-    editIdx = index;
-    document.getElementById('nodeSheetTitle').textContent = index < 0 ? 'Add node' : 'Edit node';
-    document.getElementById('modalSave').disabled = false;
-    setFormMsg('');
-    sheet.show('nodeSheet');
-    fill(index).catch((err) => setFormMsg('Load failed: ' + err.message));
-}
-
 document.getElementById('fProtocol').onchange = applyFieldVisibility;
 document.getElementById('fTransport').onchange = applyFieldVisibility;
-document.getElementById('modalCancel').onclick = sheet.close;
-document.getElementById('nodeCloseTop').onclick = sheet.close;
+document.getElementById('modalCancel').onclick = () => Window.Close();
 
 document.getElementById('modalSave').onclick = async () => {
     const node = {
@@ -88,10 +83,14 @@ document.getElementById('modalSave').onclick = async () => {
         }
     } catch (err) {
         // A restart error still means the node reached the state file, so the
-        // sheet stays open only to say that.
+        // window stays open only to say that.
         setFormMsg(err.message);
         btn.disabled = false;
         return;
     }
-    sheet.close();
+    // Closing is what tells the list to reread; the hook on this window fires
+    // for the Cancel button and the native cross the same way.
+    await Window.Close();
 };
+
+init().catch((err) => setFormMsg('Load failed: ' + err.message));

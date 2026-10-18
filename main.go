@@ -16,19 +16,19 @@ var bundled embed.FS
 const windowTitle = "Bad Proxy GUI"
 
 // mainWindowName identifies the one window that always exists. The node editor
-// and the settings sheet are drawn inside it and never take this name.
+// and the settings window are separate windows and never take this name.
 const mainWindowName = "main"
 
-// The window is sized by the two things that must fit in it: the status bar,
-// whose fixed parts - two actions and four readouts holding their longest words
-// - need 533 px, leaving the rest for the message line; and the tallest sheet,
-// the node editor with every optional field visible, which is 433 px high. The
-// self-test drives these same numbers and reads the widths back.
+// The main window is sized by its own content now that the forms have moved
+// out: the status bar, whose fixed parts - two actions and four readouts
+// holding their longest words - need 533 px, leaving the rest for the message
+// line. The height floor is the delete card plus a few rows. The self-test
+// drives these same numbers and reads the widths back.
 const (
 	mainWindowWidth  = 800
 	mainWindowHeight = 600
 	mainWindowMinW   = 660
-	mainWindowMinH   = 540
+	mainWindowMinH   = 420
 )
 
 func main() {

@@ -1,12 +1,11 @@
-// The node editor and the settings form are sheets over the main window, and
-// only one of them can be up at a time: both write the same state.
+// The delete confirmation is the one form that stays inside the main window: it
+// is a question about a row drawn right there, and a window of its own would be
+// all title bar for one sentence.
 //
-// Nothing dismisses a sheet by clicking the scrim. A mis-click that threw away
-// a half-typed node is a worse accident than one more click to close it, so the
-// exits are Cancel, the cross and Esc.
+// Nothing dismisses the card by clicking the scrim. The exits are Cancel, the
+// cross and Esc.
 
 let current = null;
-let locked = false;
 let onClosed = null;
 
 function hide() {
@@ -18,7 +17,6 @@ function hide() {
 }
 
 export function show(id) {
-    if (locked) return;
     hide();
     const el = document.getElementById(id);
     el.hidden = false;
@@ -26,14 +24,7 @@ export function show(id) {
 }
 
 export function close() {
-    if (locked) return;
     hide();
-}
-
-// A sheet whose OK is still in flight must not be dismissed: applying settings
-// can be waiting on an elevation prompt, and the answer still arrives.
-export function lock(busy) {
-    locked = !!busy;
 }
 
 export function onSheetClosed(fn) {

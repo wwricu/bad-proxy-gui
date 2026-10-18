@@ -1,7 +1,7 @@
 import { API } from './bridge.js';
-import * as sheet from './sheet.js';
+import { Window } from "/wails/runtime.js";
 
-// The settings sheet is the only settings UI on every platform. Nothing here
+// The settings window is the only settings UI on every platform. Nothing here
 // applies until OK.
 
 const MODE_LABELS = { direct: 'Direct', proxy: 'Proxy', system: 'System proxy' };
@@ -15,9 +15,7 @@ function setFormMsg(text, busy) {
     el.classList.toggle('busy', !!busy);
 }
 
-async function fill() {
-    // The draft, not GetState: it is what a settings window may write, and the
-    // two are only the same until another window changes the state first.
+async function init() {
     const [draft, platform] = await Promise.all([API().SettingsDraft(), API().GetPlatformInfo()]);
 
     document.getElementById('sHttpPort').value = draft.http_port || '10809';
@@ -39,15 +37,7 @@ async function fill() {
     document.getElementById('sHttpPort').focus();
 }
 
-export function openSettingsSheet() {
-    document.getElementById('settingsOK').disabled = false;
-    setFormMsg('');
-    sheet.show('settingsSheet');
-    fill().catch((err) => setFormMsg('Load failed: ' + err.message));
-}
-
-document.getElementById('settingsCancel').onclick = sheet.close;
-document.getElementById('settingsCloseTop').onclick = sheet.close;
+document.getElementById('settingsCancel').onclick = () => Window.Close();
 
 document.getElementById('settingsOK').onclick = async () => {
     const draft = {
@@ -63,14 +53,12 @@ document.getElementById('settingsOK').onclick = async () => {
     // pressed twice at the same draft.
     const btn = document.getElementById('settingsOK');
     btn.disabled = true;
-    sheet.lock(true);
     setFormMsg('Applying...', true);
     try {
         await API().ApplySettings(draft);
     } catch (err) {
-        sheet.lock(false);
-        // The sheet stays open with what the user typed: a refusal after the
-        // engine is already moving is worthless once the sheet is gone.
+        // The window stays open with what the user typed: the reason is worth
+        // nothing once the window is gone.
         setFormMsg(err.message);
         btn.disabled = false;
         // Some of the draft may have reached the disk before the refusal, so
@@ -80,7 +68,8 @@ document.getElementById('settingsOK').onclick = async () => {
         document.getElementById('sSocksPort').value = applied.socks_port;
         return;
     }
-    sheet.lock(false);
-    setFormMsg('');
-    sheet.close();
+    // Closing is what tells the list to reread.
+    await Window.Close();
 };
+
+init().catch((err) => setFormMsg('Load failed: ' + err.message));

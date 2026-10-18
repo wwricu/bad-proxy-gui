@@ -108,6 +108,17 @@ func (a *App) DeleteNode(index int) error {
 	return a.restartEngine()
 }
 
+// AddNodeUI opens the editor for a new node in its own window. The window
+// writes through AddNode itself, so there is nothing to collect here.
+func (a *App) AddNodeUI() error {
+	return a.openNodeWindow(-1)
+}
+
+// EditNodeUI opens the editor for the node at index.
+func (a *App) EditNodeUI(index int) error {
+	return a.openNodeWindow(index)
+}
+
 // SelectNode sets the active node.
 func (a *App) SelectNode(index int) error {
 	a.st.Active = index
