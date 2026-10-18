@@ -123,7 +123,7 @@ const testURL = "http://www.gstatic.com/generate_204"
 
 // dialThroughProxy makes a real request out through the local http inbound and
 // returns the round-trip latency. 2xx/204 counts as success; anything else (or
-// a transport error) means the tunnel is not actually carrying traffic.
+// a transport error) means the proxy path is not actually carrying traffic.
 func (s GUIState) dialThroughProxy() (time.Duration, error) {
 	proxyURL, err := url.Parse("http://127.0.0.1:" + s.HttpPort)
 	if err != nil {

@@ -68,10 +68,6 @@ type GUIState struct {
 	HideTray    bool   `json:"hide_tray"`   // hide the tray / menu-bar icon (applies on restart)
 	AllowLAN    bool   `json:"allow_lan"`   // bind the inbounds on 0.0.0.0 so other devices can use them
 	StartLogin  bool   `json:"start_login"` // register the app to launch at login
-	// TunEnabled reports the live tunnel to the UI. It is never restored:
-	// bringing the tunnel up needs administrator rights, so it waits for the
-	// switch instead of rewriting the machine's DNS at every launch.
-	TunEnabled bool `json:"tun_enabled"`
 }
 
 func defaultState() GUIState {
@@ -137,11 +133,6 @@ func (s *GUIState) normalize() {
 	case modeGlobal, modeCNWhitelist, modeGFWBlacklist:
 	default:
 		s.RoutingMode = modeGlobal
-	}
-	// Direct mode has no node behind it, so a tunnel in that mode is a reporting
-	// bug rather than a state: clear the flag before anything reads it.
-	if s.ProxyMode == modeDirect {
-		s.TunEnabled = false
 	}
 	// Fold legacy tcp (and blank) transports onto tls before anything reads a
 	// node, so an old state file cannot dial a public server in the clear.
@@ -239,11 +230,6 @@ func (st *store) load() GUIState {
 		s.HttpPort = "10809"
 	}
 	s.normalize()
-	// A tunnel never survives a process: it needs administrator rights and it
-	// owns OS state the previous run released (or lost) with it. The flag is
-	// live status, so every launch starts with it off and the switch has to be
-	// thrown again.
-	s.TunEnabled = false
 	return s
 }
 

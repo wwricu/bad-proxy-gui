@@ -15,7 +15,6 @@ type Settings struct {
 	SocksPort   string `json:"socks_port"`
 	ProxyMode   string `json:"proxy_mode"`
 	RoutingMode string `json:"routing_mode"`
-	TunEnabled  bool   `json:"tun_enabled"`
 	AllowLAN    bool   `json:"allow_lan"`
 	StartLogin  bool   `json:"start_login"`
 	HideTray    bool   `json:"hide_tray"`
@@ -47,16 +46,13 @@ func portNumber(p string) (int, error) {
 	return n, nil
 }
 
-// SettingsDraft is what the settings window opens with. The tunnel is read
-// live, not from the flag: the flag never survives a restart, and a run where
-// up() failed must not come back with the box still ticked.
+// SettingsDraft is what the settings window opens with.
 func (a *App) SettingsDraft() Settings {
 	return Settings{
 		HttpPort:    a.st.HttpPort,
 		SocksPort:   a.st.SocksPort,
 		ProxyMode:   a.st.ProxyMode,
 		RoutingMode: a.st.RoutingMode,
-		TunEnabled:  a.tun.running(),
 		AllowLAN:    a.st.AllowLAN,
 		StartLogin:  a.st.StartLogin,
 		HideTray:    a.st.HideTray,
@@ -72,16 +68,11 @@ func (a *App) ApplySettings(s Settings) error {
 	s.HttpPort = strings.TrimSpace(s.HttpPort)
 	s.SocksPort = strings.TrimSpace(s.SocksPort)
 	prev := a.st
-	running := a.tun.running()
 	next := a.st
 	next.HttpPort, next.SocksPort = s.HttpPort, s.SocksPort
 	next.ProxyMode, next.RoutingMode = s.ProxyMode, s.RoutingMode
 	next.AllowLAN, next.StartLogin, next.HideTray = s.AllowLAN, s.StartLogin, s.HideTray
-	next.TunEnabled = false
 	next.normalize()
-	// Direct mode has no node for a tunnel to carry traffic through, so asking
-	// for TUN there means taking the adapter down, not putting it up.
-	wantTun := tunOffered && s.TunEnabled && next.ProxyMode != modeDirect
 
 	// Registering with the OS first keeps the persisted flag truthful: a failure
 	// here leaves the running proxy exactly as it was.
@@ -95,20 +86,8 @@ func (a *App) ApplySettings(s Settings) error {
 	if err := a.store.save(next); err != nil {
 		return err
 	}
-	if running && !wantTun {
-		a.tun.down()
-	}
 	if err := a.restartEngine(); err != nil {
 		return err
-	}
-	if wantTun && !running {
-		if err := a.tun.up(next); err != nil {
-			return fmt.Errorf("TUN failed: %w", err)
-		}
-		a.st.TunEnabled = true
-		if err := a.store.save(a.st); err != nil {
-			return err
-		}
 	}
 	// The OS proxy is only touched on the edges this app owns, so a direct<->
 	// proxy change never disturbs whatever the user configured themselves.

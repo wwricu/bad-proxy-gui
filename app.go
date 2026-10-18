@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
-	"github.com/wwricu/bad-proxy-gui/tunplat"
 )
 
 // App exposes backend methods to the frontend via Wails runtime binding.
@@ -20,7 +19,6 @@ type App struct {
 	store      *store
 	trayOn     bool
 	quitting   bool
-	tun        tunRunner
 }
 
 // newApp loads the saved state. It runs before the window exists: the state
@@ -35,9 +33,6 @@ func newApp() *App {
 // ServiceStartup is Wails' hook for a bound service. It runs once the run loop
 // is up, which is the first moment a window or a tray may be touched.
 func (a *App) ServiceStartup(context.Context, application.ServiceOptions) error {
-	// A run that was killed rather than closed left the system resolver pointed
-	// at this app's DNS port. Fix that before anything else touches the network.
-	a.recoverTunToken()
 	// The engine runs from launch: direct mode is always buildable, so the
 	// local inbounds answer immediately and mode switches are cheap restarts.
 	if err := a.eng.start(a.st); err != nil {
@@ -180,21 +175,12 @@ func (a *App) restartEngine() error {
 	if err := a.eng.start(a.st); err != nil {
 		return fmt.Errorf("proxy restart failed: %w", err)
 	}
-	// The tunnel dials this engine, so a new port or a new routing preset has
-	// to reach it too. It is re-pointed rather than rebuilt: tearing the adapter
-	// down would drop every connection for a settings change.
-	a.tun.refresh(a.st)
 	return nil
 }
 
-// shutdown stops the tunnel first and the engine second. The tunnel's resolver
-// answers through the engine's SOCKS inbound and it owns the machine's DNS
-// settings, so both have to be released before the process leaves the building.
+// shutdown releases the OS proxy last: the engine has to stay up until the
+// resolver no longer points at it.
 func (a *App) shutdown() {
-	if a.tun.running() {
-		a.tun.down()
-		a.st.TunEnabled = false
-	}
 	if a.eng.running() {
 		a.eng.stop()
 	}
@@ -210,7 +196,6 @@ func (a *App) GetPlatformInfo() map[string]bool {
 		"trayCanHide":          trayCanHide,
 		"systemProxySupported": systemProxySupported,
 		"nativeContextMenu":    nativeContextMenuSupported,
-		"tunSupported":         tunOffered && tunplat.Supported(),
 	}
 }
 
