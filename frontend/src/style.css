@@ -1,3 +1,9 @@
+:root {
+    /* The bar's height is needed twice: the bar itself and the list above it,
+       which is sized as the viewport minus the bar. */
+    --bar-height: 36px;
+}
+
 * {
     margin: 0;
     padding: 0;
@@ -13,7 +19,7 @@ body {
 
 #app {
     display: flex;
-    height: calc(100vh - 44px);
+    height: calc(100vh - var(--bar-height));
 }
 
 /* Node list fills the window above the status bar */
@@ -34,7 +40,8 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 8px 12px;
+    gap: 12px;
+    padding: 12px 16px;
     border-bottom: 1px solid #e7eaef;
     cursor: pointer;
 }
@@ -43,8 +50,11 @@ body {
     background: #edf0f4;
 }
 
+/* An inset edge rather than a border: a border would change the row's content
+   box and every name would jump a few pixels when another node was picked. */
 .node-item.active {
     background: #e7eaef;
+    box-shadow: inset 3px 0 0 #2f6f9f;
 }
 
 .node-item.active:hover {
@@ -53,24 +63,50 @@ body {
 
 .node-info {
     flex: 1;
+    min-width: 0;
 }
 
 .node-name {
-    font-weight: bold;
-    font-size: 13px;
+    font-weight: 600;
+    font-size: 15px;
 }
 
 .node-detail {
-    font-size: 11px;
+    font-size: 12.5px;
     color: #697079;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+/* The latency a test came back with used to be tacked onto the address line,
+   where it read as part of the URL and the right half of the row stayed empty
+   anyway. It is the one number worth scanning, so it gets the corner. */
+.node-result {
+    flex: none;
+    max-width: 45%;
+    overflow: hidden;
+    font-size: 13px;
+    color: #2f6f9f;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.node-result.pending {
+    color: #8a929c;
+}
+
+.node-result.failed {
+    color: #c0392b;
 }
 
 /* Status bar: read-only facts about the running engine, then its actions */
 .status-bar {
-    height: 44px;
+    height: var(--bar-height);
     display: flex;
     align-items: center;
-    padding: 0 12px;
+    padding: 0 10px;
     background: #eef1f4;
     border-top: 1px solid #d2d7de;
     gap: 0;
@@ -82,8 +118,8 @@ body {
 .readout {
     display: flex;
     align-items: baseline;
-    gap: 6px;
-    padding: 0 12px;
+    gap: 5px;
+    padding: 0 10px;
     white-space: nowrap;
     border-left: 1px solid #dcdfe4;
 }
@@ -94,7 +130,7 @@ body {
 }
 
 .readout label {
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 600;
     letter-spacing: 0.03em;
     color: #8a929c;
@@ -102,7 +138,7 @@ body {
 }
 
 .readout span {
-    font-size: 13px;
+    font-size: 12.5px;
     color: #22262b;
     font-variant-numeric: tabular-nums;
 }
@@ -110,7 +146,7 @@ body {
 .status {
     flex: 1;
     min-width: 0;
-    font-size: 12px;
+    font-size: 11.5px;
     color: #697079;
     text-align: right;
     white-space: nowrap;
@@ -124,19 +160,19 @@ body {
     flex: none;
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding-left: 12px;
+    gap: 6px;
+    padding-left: 10px;
 }
 
 .bar-btn {
-    height: 30px;
-    padding: 0 10px;
+    height: 25px;
+    padding: 0 9px;
     display: flex;
     align-items: center;
     background: white;
     border: 1px solid #d2d7de;
-    border-radius: 6px;
-    font-size: 13px;
+    border-radius: 5px;
+    font-size: 12.5px;
     color: #2f6f9f;
     cursor: pointer;
     white-space: nowrap;
@@ -148,14 +184,14 @@ body {
 
 .gear-btn {
     flex: none;
-    width: 30px;
-    height: 30px;
+    width: 25px;
+    height: 25px;
     display: flex;
     align-items: center;
     justify-content: center;
     background: white;
     border: 1px solid #d2d7de;
-    border-radius: 6px;
+    border-radius: 5px;
     color: #697079;
     cursor: pointer;
 }

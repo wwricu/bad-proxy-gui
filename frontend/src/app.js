@@ -39,12 +39,15 @@ function render() {
     (state.nodes || []).forEach((node, idx) => {
         const item = document.createElement('div');
         item.className = 'node-item' + (idx === state.active ? ' active' : '');
-        const result = nodeResults[idx] ? ' · ' + nodeResults[idx] : '';
+        const result = nodeResults[idx] || '';
+        const resultClass = result === 'Testing…' ? ' pending'
+            : result.startsWith('Failed') ? ' failed' : '';
         item.innerHTML = `
             <div class="node-info">
                 <div class="node-name">${escapeHtml(node.name)}</div>
-                <div class="node-detail">${escapeHtml(node.protocol)}://${escapeHtml(node.server)}:${escapeHtml(node.port)}${escapeHtml(result)}</div>
+                <div class="node-detail">${escapeHtml(node.protocol)}://${escapeHtml(node.server)}:${escapeHtml(node.port)} · ${escapeHtml(node.transport || 'tls')}</div>
             </div>
+            ${result ? `<div class="node-result${resultClass}">${escapeHtml(result)}</div>` : ''}
         `;
         item.onclick = () => selectNode(idx);
         item.ondblclick = () => editNode(idx);
