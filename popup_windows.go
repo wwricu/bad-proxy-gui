@@ -36,7 +36,6 @@ var (
 	procDispatchMessageW = user32Ctx.NewProc("DispatchMessageW")
 	procMsgWait          = user32Ctx.NewProc("MsgWaitForMultipleObjects")
 	procGetModuleHandleW = kernel32Ctx.NewProc("GetModuleHandleW")
-	procMessageBoxW      = user32Ctx.NewProc("MessageBoxW")
 )
 
 const (
@@ -53,14 +52,6 @@ const (
 	wmNull        = 0x0000
 	menuHostClass = "BadProxyMenuHost"
 	menuPumpWait  = 50 // ms
-
-	mbOk           = 0x00000000
-	mbYesNo        = 0x00000004
-	mbIconQuestion = 0x00000020
-	mbIconWarning  = 0x00000030
-	mbDefButton2   = 0x00000100
-	mbSystemModal  = 0x00001000
-	idYes          = 6
 )
 
 // wndClassEx mirrors WNDCLASSEXW as laid out on 64-bit Windows.
@@ -235,29 +226,4 @@ func showNativeContextMenu(labels []string) (int, error) {
 	case <-time.After(5 * time.Minute):
 		return -1, fmt.Errorf("context menu never closed")
 	}
-}
-
-// showMessageBox pops a real OS dialog and reports whether the user confirmed.
-//
-// The owner is deliberately nil, with MB_SYSTEMMODAL standing in for the
-// parent link. Passing a Wails window handle as the owner is not an option:
-// go-webview2's host window aborts the process outright when a modal is bound
-// to it, and the owning window is whichever form raised the dialog anyway, not
-// something this function can know.
-func showMessageBox(title, message string, confirm bool) bool {
-	t, err1 := syscall.UTF16PtrFromString(title)
-	m, err2 := syscall.UTF16PtrFromString(message)
-	if err1 != nil || err2 != nil {
-		return false
-	}
-	style := uintptr(mbOk | mbIconWarning | mbSystemModal)
-	if confirm {
-		style = mbYesNo | mbIconQuestion | mbDefButton2 | mbSystemModal
-	}
-	r, _, _ := procMessageBoxW.Call(0,
-		uintptr(unsafe.Pointer(m)), uintptr(unsafe.Pointer(t)), style)
-	if confirm {
-		return r == idYes
-	}
-	return r != 0
 }

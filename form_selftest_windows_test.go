@@ -145,7 +145,9 @@ func runFormSelfTest() int {
 		Height:    mainWindowHeight,
 		MinWidth:  mainWindowMinW,
 		MinHeight: mainWindowMinH,
-		URL:       "/",
+		// The query is what hands the harness the two actions that a native OS
+		// menu otherwise hides.
+		URL: "/?selftest=1",
 	})
 
 	probes := make(chan map[string]any, 256)
@@ -194,44 +196,62 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 	c.check(strings.Contains(readouts, "closed=true"), "both sheets start closed")
 
 	// The minimum size is what the layout has to survive: the bar's three zones
-	// stay reachable and the tallest sheet fits without a scrollbar.
+	// stay reachable and the tallest sheet fits without a scrollbar. The readouts
+	// are measured with the longest words they can hold, because "Direct" is not
+	// what sets the width.
 	win.SetSize(mainWindowMinW, mainWindowMinH)
 	time.Sleep(800 * time.Millisecond)
 	fits := probe(win, probes, `
 		(() => {
 			const d = document.documentElement;
 			const bar = document.querySelector(".status-bar");
+			const set = (id, v) => { document.getElementById(id).textContent = v; };
+			const back = ["roMode","roRouting"].map(id => document.getElementById(id).textContent);
+			set("roMode","System proxy"); set("roRouting","Bypass GFW");
 			const box = (id) => {
 				const r = document.getElementById(id).getBoundingClientRect();
-				return [Math.round(r.left), Math.round(r.right)];
+				return [Math.round(r.left), Math.round(r.right), Math.round(r.width)];
 			};
-			return {page: [d.scrollWidth, d.clientWidth, d.scrollHeight, d.clientHeight],
-					bar: [bar.clientWidth, bar.scrollWidth],
-					add: box("addNodeBtn"), gear: box("gearBtn"),
-					addLabel: document.getElementById("addNodeBtn").textContent.trim(),
-					facts: Math.round(document.querySelector(".readout").getBoundingClientRect().left),
-					statusRight: Math.round(document.getElementById("statusText").getBoundingClientRect().right),
-					inner: d.clientWidth};
+			const facts = [...document.querySelectorAll(".readout")];
+			const out = {
+				page: [d.scrollWidth, d.clientWidth, d.scrollHeight, d.clientHeight],
+				bar: [bar.clientWidth, bar.scrollWidth],
+				gear: box("gearBtn"), add: box("addNodeBtn"), status: box("statusText"),
+				addLabel: document.getElementById("addNodeBtn").textContent.trim(),
+				facts: Math.round(facts[0].getBoundingClientRect().left),
+				factsRight: Math.round(facts[facts.length - 1].getBoundingClientRect().right),
+				wide: facts.map(el => Math.round(el.getBoundingClientRect().width)),
+				actions: Math.round(document.querySelector(".bar-actions").getBoundingClientRect().width),
+				inner: d.clientWidth};
+			set("roMode", back[0]); set("roRouting", back[1]);
+			return out;
 		})()`)
 	var layout struct {
-		Page        [4]int `json:"page"`
-		Bar         [2]int `json:"bar"`
-		Add         [2]int `json:"add"`
-		AddLabel    string `json:"addLabel"`
-		Gear        [2]int `json:"gear"`
-		Facts       int    `json:"facts"`
-		StatusRight int    `json:"statusRight"`
-		Inner       int    `json:"inner"`
+		Page       [4]int `json:"page"`
+		Bar        [2]int `json:"bar"`
+		Gear       [3]int `json:"gear"`
+		Add        [3]int `json:"add"`
+		Status     [3]int `json:"status"`
+		AddLabel   string `json:"addLabel"`
+		Facts      int    `json:"facts"`
+		FactsRight int    `json:"factsRight"`
+		Wide       []int  `json:"wide"`
+		Actions    int    `json:"actions"`
+		Inner      int    `json:"inner"`
 	}
 	c.check(json.Unmarshal([]byte(fits), &layout) == nil, "the window reports its own layout: %s", fits)
+	fmt.Printf("  bar    actions=%d readouts=%v needs=%d of %d\n",
+		layout.Actions, layout.Wide, layout.Actions+sum(layout.Wide)+20, layout.Inner)
 	if layout.Inner > 0 {
 		c.check(layout.Page[0] <= layout.Page[1]+1, "the page itself does not overflow: %v", layout.Page)
 		c.check(layout.Bar[1] <= layout.Bar[0]+1, "the status bar is not wider than the window: %v", layout.Bar)
 		c.check(layout.AddLabel == "", "the add button is an icon, not a word: %q", layout.AddLabel)
-		c.check(layout.Add[0] >= 0 && layout.Add[1] <= layout.Gear[0], "the actions keep their order: %v then %v", layout.Add, layout.Gear)
-		c.check(layout.Gear[1] <= layout.Facts, "the actions are the left group, the facts follow: gear=%v facts=%d", layout.Gear, layout.Facts)
-		c.check(layout.StatusRight <= layout.Inner+1 && layout.StatusRight > layout.Inner-40,
-			"the status line holds the right edge: %d of %d", layout.StatusRight, layout.Inner)
+		c.check(layout.Gear[0] >= 0 && layout.Gear[2] <= layout.Add[0], "the gear comes first, the plus after it: %v then %v", layout.Gear, layout.Add)
+		c.check(layout.Add[1] <= layout.Status[0], "the message space starts where the actions end: %d then %d", layout.Add[1], layout.Status[0])
+		c.check(layout.Status[1] <= layout.Facts, "the message space stops before the facts: %d then %d", layout.Status[1], layout.Facts)
+		c.check(layout.FactsRight >= layout.Inner-10 && layout.FactsRight <= layout.Inner,
+			"the facts hold the right edge: %d of %d", layout.FactsRight, layout.Inner)
+		c.check(layout.Status[2] > 0, "the message space still has room at the minimum width: %d px", layout.Status[2])
 	}
 	c.shot(win, "main-minimum")
 
@@ -311,6 +331,26 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 	rows := probeUntil(win, probes, `document.querySelectorAll(".node-item").length`,
 		func(s string) bool { return s == "2" }, 8*time.Second)
 	c.check(rows == "2", "the closed editor told the list to reread: %q rows", rows)
+
+	// ---- a failed test ----
+	// gamma.example.invalid does not resolve, so this is a real failure with a
+	// real reason attached. The row is not a place to read a dial error: the
+	// corner says only that it failed and the reason goes on the chip.
+	probe(win, probes, `(() => { window.selftest.testNode(1); return "sent"; })()`)
+	chip := probeUntil(win, probes, `
+		(() => {
+			const el = document.querySelector(".node-item:nth-child(2) .node-result");
+			return el ? {text: el.textContent, reason: el.getAttribute("title") || ""} : null;
+		})()`, func(s string) bool { return strings.Contains(s, "Failed") }, 90*time.Second)
+	var shown struct {
+		Text   string `json:"text"`
+		Reason string `json:"reason"`
+	}
+	c.check(json.Unmarshal([]byte(chip), &shown) == nil, "the row reports its own chip: %s", chip)
+	c.check(shown.Text == "Failed", "a failed test shows one word in the row: %q", shown.Text)
+	c.check(strings.HasPrefix(shown.Reason, "Failed:") && len(shown.Reason) > len("Failed:"),
+		"the reason is kept, on the chip: %q", shown.Reason)
+	c.shot(win, "node-failed")
 
 	// ---- the settings sheet ----
 	probe(win, probes, `(() => { document.getElementById("gearBtn").click(); return "sent"; })()`)
@@ -404,6 +444,67 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 	c.check(esc == "true", "Esc dismisses the sheet")
 	c.check(len(stateFromFile(dir).Nodes) == len(before.Nodes), "a dismissed sheet wrote nothing")
 
+	// ---- deleting a node ----
+	// The confirmation is a card in this window because the OS one brought a
+	// title bar and a frame around a single sentence. Two lines is the whole
+	// design: the question, then the answer.
+	probe(win, probes, `(() => { window.selftest.askDelete(1); return "sent"; })()`)
+	asked := probeUntil(win, probes, `
+		(() => {
+			const p = document.getElementById("deleteQuestion");
+			const card = document.querySelector("#deleteSheet .sheet").getBoundingClientRect();
+			return {open: document.getElementById("deleteSheet").hidden === false,
+					q: p.textContent,
+					lines: Math.round(p.offsetHeight / parseFloat(getComputedStyle(p).lineHeight)),
+					qw: Math.round(p.getBoundingClientRect().width),
+					aw: Math.round(document.querySelector("#deleteSheet .sheet-actions").getBoundingClientRect().width),
+					card: [Math.round(card.width), Math.round(card.height)]};
+		})()`, func(s string) bool { return strings.Contains(s, `"open":true`) }, 5*time.Second)
+	var ask struct {
+		Open  bool   `json:"open"`
+		Q     string `json:"q"`
+		Lines int    `json:"lines"`
+		Text  int    `json:"qw"`
+		Btns  int    `json:"aw"`
+		Card  [2]int `json:"card"`
+	}
+	c.check(json.Unmarshal([]byte(asked), &ask) == nil, "the card reports itself: %s", asked)
+	c.check(ask.Open, "the delete card is up in this window: %s", asked)
+	c.check(ask.Q == `Delete node "gamma"?`, "the card names what is about to go: %q", ask.Q)
+	c.check(ask.Lines == 1, "the question is a single line: %s", asked)
+	widest := ask.Text
+	if ask.Btns > widest {
+		widest = ask.Btns
+	}
+	// Two lines, and no third thing between them: the card is only as wide as
+	// the wider of the sentence and its buttons, plus the padding.
+	c.check(ask.Card[0]-widest <= 34 && ask.Card[0] >= widest,
+		"the card hugs its content: %d wide against %d of text and %d of buttons", ask.Card[0], ask.Text, ask.Btns)
+	c.check(ask.Card[1] < 130, "the card is short: %d px tall", ask.Card[1])
+	c.shot(win, "delete-ask")
+
+	probe(win, probes, `(() => { document.getElementById("deleteCancel").click(); return "sent"; })()`)
+	c.check(probeUntil(win, probes, `document.getElementById("deleteSheet").hidden`,
+		func(s string) bool { return s == "true" }, 5*time.Second) == "true", "Cancel closes the card")
+	c.check(len(stateFromFile(dir).Nodes) == 2, "Cancel deleted nothing")
+
+	// Delete is the same two clicks with the other answer.
+	probe(win, probes, `(() => { window.selftest.askDelete(1); return "sent"; })()`)
+	if probeUntil(win, probes, `document.getElementById("deleteSheet").hidden`,
+		func(s string) bool { return s == "false" }, 5*time.Second) != "false" {
+		c.fail("the card never reopened for the delete itself")
+	} else {
+		probe(win, probes, `(() => { document.getElementById("deleteOK").click(); return "sent"; })()`)
+		deadline := time.Now().Add(10 * time.Second)
+		for len(stateFromFile(dir).Nodes) != 1 && time.Now().Before(deadline) {
+			time.Sleep(200 * time.Millisecond)
+		}
+		c.check(len(stateFromFile(dir).Nodes) == 1, "Delete took that node out of state.json: %d left",
+			len(stateFromFile(dir).Nodes))
+		c.check(probeUntil(win, probes, `document.querySelectorAll(".node-item").length`,
+			func(s string) bool { return s == "1" }, 8*time.Second) == "1", "the list dropped the row")
+	}
+
 	c.shot(win, "main-final")
 	a.quit()
 }
@@ -467,6 +568,14 @@ func stateFromFile(dir string) GUIState {
 	var s GUIState
 	_ = json.Unmarshal(b, &s)
 	return s
+}
+
+func sum(xs []int) int {
+	t := 0
+	for _, x := range xs {
+		t += x
+	}
+	return t
 }
 
 // ---- pixels ----

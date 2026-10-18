@@ -29,7 +29,7 @@ func TestBindingNamesMatchTheFrontend(t *testing.T) {
 
 	methods := reflect.TypeOf(&App{})
 	for _, name := range []string{
-		"AddNode", "ApplySettings", "ConfirmDialog", "DeleteNode",
+		"AddNode", "ApplySettings", "DeleteNode",
 		"GetPlatformInfo", "GetState", "SelectNode",
 		"SettingsDraft", "ShowContextMenu", "TestNode", "UpdateNode",
 	} {

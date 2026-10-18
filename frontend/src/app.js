@@ -41,15 +41,12 @@ function render() {
     (state.nodes || []).forEach((node, idx) => {
         const item = document.createElement('div');
         item.className = 'node-item' + (idx === state.active ? ' active' : '');
-        const result = nodeResults[idx] || '';
-        const resultClass = result === 'Testing…' ? ' pending'
-            : result.startsWith('Failed') ? ' failed' : '';
         item.innerHTML = `
             <div class="node-info">
                 <div class="node-name">${escapeHtml(node.name)}</div>
                 <div class="node-detail">${escapeHtml(node.protocol)}://${escapeHtml(node.server)}:${escapeHtml(node.port)} · ${escapeHtml(node.transport || 'tls')}</div>
             </div>
-            ${result ? `<div class="node-result${resultClass}">${escapeHtml(result)}</div>` : ''}
+            ${resultChip(nodeResults[idx] || '')}
         `;
         item.onclick = () => selectNode(idx);
         item.ondblclick = () => editNode(idx);
@@ -70,6 +67,25 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text == null ? '' : String(text);
     return div.innerHTML;
+}
+
+function escapeAttr(text) {
+    return escapeHtml(text).replace(/"/g, '&quot;');
+}
+
+// A test failure reads like "Failed: dial tcp: lookup x: no such host" and the
+// row has a couple of centimetres for it, so half a sentence on the corner is
+// worse than one word. The corner says which of the three states the node is
+// in; the reason waits on the chip for whoever asked for it.
+function resultChip(result) {
+    if (!result) return '';
+    if (result === 'Testing…') {
+        return '<div class="node-result pending">Testing…</div>';
+    }
+    if (result.startsWith('Failed')) {
+        return `<div class="node-result failed" title="${escapeAttr(result)}">Failed</div>`;
+    }
+    return `<div class="node-result">${escapeHtml(result)}</div>`;
 }
 
 // ---- context menu ----
@@ -124,15 +140,24 @@ async function ctxActionTest(idx) {
     render();
 }
 
-async function ctxActionDelete(idx) {
-    let ok = false;
-    try {
-        ok = await API().ConfirmDialog('Bad Proxy', 'Delete node "' + state.nodes[idx].name + '"?');
-    } catch (err) {
-        setStatus('Delete failed: ' + err.message);
-        return;
-    }
-    if (!ok) return;
+// The node waiting to be deleted, or -1. The sheet that asks is the only thing
+// that sets it, and it clears it whether the answer was yes or no.
+let pendingDelete = -1;
+
+function ctxActionDelete(idx) {
+    // One sentence, one line where it fits: the point of the card is that the
+    // name is short enough to read whole before answering.
+    document.getElementById('deleteQuestion').textContent =
+        'Delete node "' + state.nodes[idx].name + '"?';
+    pendingDelete = idx;
+    sheet.show('deleteSheet');
+}
+
+document.getElementById('deleteCancel').onclick = () => sheet.close();
+
+document.getElementById('deleteOK').onclick = async () => {
+    const idx = pendingDelete;
+    sheet.close();
     try {
         await API().DeleteNode(idx);
         nodeResults = {};
@@ -140,7 +165,7 @@ async function ctxActionDelete(idx) {
     } catch (err) {
         setStatus('Delete failed: ' + err.message);
     }
-}
+};
 
 document.getElementById('ctxTest').onclick = () => {
     closeCtxMenu();
@@ -172,6 +197,7 @@ function editNode(idx) {
 // reread. Test results are dropped with it: applying settings restarts the
 // engine, so the last latency is no longer a measurement of what is running.
 sheet.onSheetClosed(() => {
+    pendingDelete = -1;
     nodeResults = {};
     loadState().catch((err) => setStatus('Load failed: ' + err.message));
 });
@@ -187,5 +213,13 @@ async function selectNode(idx) {
     }
 }
 
-// Initialize
+// ---- initialize ----
+
+// The Windows self-test opens this page with ?selftest=1 and drives it with
+// script. Testing and deleting a node both start in a native OS menu, which a
+// script cannot reach, so the two actions behind those items are handed over.
+if (new URLSearchParams(window.location.search).has('selftest')) {
+    window.selftest = { testNode: ctxActionTest, askDelete: ctxActionDelete };
+}
+
 loadState().catch((err) => setStatus('Load failed: ' + err.message));

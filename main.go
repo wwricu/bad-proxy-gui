@@ -19,13 +19,15 @@ const windowTitle = "Bad Proxy GUI"
 // and the settings sheet are drawn inside it and never take this name.
 const mainWindowName = "main"
 
-// The window is sized by the two things that must fit in it: the widest status
-// bar (two actions plus four readouts) and the tallest sheet, the node editor
-// with every optional field visible. The self-test drives these same numbers.
+// The window is sized by the two things that must fit in it: the status bar,
+// whose fixed parts - two actions and four readouts holding their longest words
+// - need 533 px, leaving the rest for the message line; and the tallest sheet,
+// the node editor with every optional field visible, which is 433 px high. The
+// self-test drives these same numbers and reads the widths back.
 const (
-	mainWindowWidth  = 860
+	mainWindowWidth  = 800
 	mainWindowHeight = 600
-	mainWindowMinW   = 720
+	mainWindowMinW   = 660
 	mainWindowMinH   = 540
 )
 

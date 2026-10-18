@@ -226,15 +226,3 @@ func (a *App) ShowContextMenu(labelsNL string) int {
 	}
 	return sel
 }
-
-// ConfirmDialog pops a real OS yes/no dialog owned by the app window and
-// reports the user's choice.
-func (a *App) ConfirmDialog(title, message string) bool {
-	return showMessageBox(title, message, true)
-}
-
-// InfoDialog pops a real OS alert. The frontend cannot use window.alert
-// because the WebView2 host suppresses it.
-func (a *App) InfoDialog(title, message string) bool {
-	return showMessageBox(title, message, false)
-}
