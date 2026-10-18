@@ -86,9 +86,8 @@ const (
 	ndVKEscape  = 0x1B
 
 	ndESAuto    = 0x0080
-	ndBSOwner   = 0x000B // BS_OWNERDRAW (a low-byte style, not a 0x30000 bit)
-	ndSSRight   = 0x0202 // SS_RIGHT | SS_CENTERIMAGE
-	ndSSLeft    = 0x0000
+	ndBSOwner   = 0x000B                            // BS_OWNERDRAW (a low-byte style, not a 0x30000 bit)
+	ndSSLabel   = 0x0200                            // SS_CENTERIMAGE: grid labels sit left-aligned, like .form-grid
 	ndCBSList   = 0x0003 | 0x0040 | 0x0200 | 0x0400 // CBS_DROPDOWNLIST|AUTOHSCROLL|HASSTRINGS|NOINTEGRALHEIGHT
 	ndODSSelect = 0x0001                            // ODS_SELECTED
 
@@ -138,8 +137,6 @@ const (
 	ndColGap      = 10
 	ndRowGap      = 8  // .form-grid row-gap
 	ndInputH      = 26 // 13px text + 6px padding + 1px border
-	ndTitleH      = 20
-	ndTitleGap    = 12 // .modal-title margin-bottom
 	ndActionsGap  = 16 // .modal-actions margin-top
 	ndBtnGap      = 8
 	ndBtnH        = 28 // 13px text + 6px padding + 2px border
@@ -148,7 +145,6 @@ const (
 	ndFrameInset  = 2  // gap between a drawn field frame and the EDIT inside it
 	ndBodyFontPx  = 13 // .form-grid input, .btn-* font-size
 	ndLabelFontPx = 12 // .form-grid label font-size
-	ndTitleFontPx = 15 // .modal-title font-size
 
 	ndLabelX = ndPad
 	ndInputX = ndPad + ndLabelW + ndColGap
@@ -413,20 +409,14 @@ func (f *ndForm) createWindow() bool {
 	return true
 }
 
-// nodeDialogTitle is the native caption. The card title inside the window
-// repeats the action alone, the way the HTML modal renders it.
+// nodeDialogTitle is the native caption. A native window has a caption, so the
+// editor does not repeat the action as an in-card heading - the HTML modal
+// dropped that too, and the two now show the form and nothing else.
 func nodeDialogTitle(n Node) string {
 	if nodeIsNew(n) {
 		return "Bad Proxy · Add Node"
 	}
 	return "Bad Proxy · Edit Node"
-}
-
-func nodeCardTitle(n Node) string {
-	if nodeIsNew(n) {
-		return "Add Node"
-	}
-	return "Edit Node"
 }
 
 func nodeIsNew(n Node) bool {
@@ -555,10 +545,10 @@ func (f *ndForm) createEx(class, text string, id int, style, exStyle uintptr, fo
 	return h
 }
 
-// createLabel makes a right-aligned grid label and records which field it
+// createLabel makes a left-aligned grid label and records which field it
 // belongs to, so WM_CTLCOLORSTATIC can paint it in the muted label colour.
 func (f *ndForm) createLabel(text string, forID int) uintptr {
-	h := f.createStatic(text, ndSSRight, f.fontLbl)
+	h := f.createStatic(text, ndSSLabel, f.fontLbl)
 	f.labelID[h] = forID
 	return h
 }
@@ -653,7 +643,7 @@ func (f *ndForm) visFor(id int) bool {
 	return true // Name/Protocol/Address/Port/Transport always show
 }
 
-// layout reproduces .form-grid: a 110px right-aligned label column, the field
+// layout reproduces .form-grid: a 110px left-aligned label column, the field
 // filling the rest of the 380px card, 8px rows, then the actions flush right.
 func (f *ndForm) layout() {
 	rowH, gap := f.px(ndInputH), f.px(ndRowGap)

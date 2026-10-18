@@ -15,8 +15,17 @@ async function loadState() {
     render();
 }
 
-function setStatus(text) {
+let statusTimer = 0;
+
+// ttlMs is optional: a status line given one clears itself, so a transient
+// failure does not stay on the bar looking like a current condition.
+function setStatus(text, ttlMs) {
+    clearTimeout(statusTimer);
+    statusTimer = 0;
     document.getElementById('statusText').textContent = text || '';
+    if (text && ttlMs) {
+        statusTimer = setTimeout(() => setStatus(''), ttlMs);
+    }
 }
 
 function render() {
@@ -184,7 +193,6 @@ function setRow(labelId, inputId, visible) {
 
 function openForm(idx) {
     editIdx = idx;
-    document.getElementById('modalTitle').textContent = idx < 0 ? 'Add Node' : 'Edit Node';
     const n = idx < 0 ? { name: '', protocol: 'vless', server: '', port: '', secret: '', transport: 'xhttp', path: '', authority: '', padding: '' } : state.nodes[idx];
     document.getElementById('fName').value = n.name || '';
     document.getElementById('fProtocol').value = n.protocol || 'vless';
@@ -324,7 +332,8 @@ document.getElementById('tunSwitch').onchange = async (e) => {
         await API().SetTun(on);
         setStatus('');
     } catch (err) {
-        setStatus('TUN failed: ' + err.message);
+        // The reason stays in the log; on the bar it only needs to be seen once.
+        setStatus('TUN failed: ' + err.message, 8000);
     }
     sw.disabled = false;
     await loadState();

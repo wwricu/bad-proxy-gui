@@ -92,7 +92,7 @@ const (
 	// grid's box model is the frame, not the window rect.
 	wantFrameInset = 2
 	wantCornerPad  = 8           // stay clear of the 4px rounded corners when sampling a line
-	wantTitle      = "Edit Node" // .modal-title text for an existing node
+	wantTitle      = "Edit Node" // the native caption's action word for an existing node
 	wantSaveText   = "Save"
 	wantCancel     = "Cancel"
 )
@@ -422,9 +422,10 @@ func stCheckGrid(t *testing.T, hwnd uintptr, kids []stChild, img *image.RGBA) {
 	}
 
 	const (
-		stSSRight  = 0x0200 // SS_RIGHT, the .form-grid label alignment
-		stTypeMask = 0x000F // BS_TYPEMASK: the button flavour lives in the low nibble
-		stTabstop  = 0x00010000
+		stSSCenterImg = 0x0200 // SS_CENTERIMAGE, which every .form-grid label carries
+		stSSRight     = 0x0002 // SS_RIGHT, the alignment .form-grid no longer asks for
+		stTypeMask    = 0x000F // BS_TYPEMASK: the button flavour lives in the low nibble
+		stTabstop     = 0x00010000
 	)
 
 	var fields, labels, btns []stChild
@@ -442,9 +443,13 @@ func stCheckGrid(t *testing.T, hwnd uintptr, kids []stChild, img *image.RGBA) {
 			if c.style&stTabstop != 0 {
 				t.Errorf("BUG: label %q is a tab stop: Tab lands on text", stText(c.hwnd))
 			}
-			// The card title is a SS_LEFT Static across the whole grid width;
-			// .form-grid labels are the SS_RIGHT ones in the 110px column.
-			if c.style&stSSRight != 0 {
+			// .form-grid labels are the SS_CENTERIMAGE Statics in the 110px
+			// column, and they are left-aligned: the ragged right edge the old
+			// SS_RIGHT version gave is what the CSS change got rid of.
+			if c.style&stSSCenterImg != 0 {
+				if c.style&stSSRight != 0 {
+					t.Errorf("UI BUG: label %q is SS_RIGHT but .form-grid sets text-align: left", stText(c.hwnd))
+				}
 				labels = append(labels, c)
 			}
 		case "Button":
@@ -533,17 +538,20 @@ func stCheckGrid(t *testing.T, hwnd uintptr, kids []stChild, img *image.RGBA) {
 	}
 
 	// The card names itself in the window caption ("Bad Proxy · Edit Node"), which
-	// is where a native window puts a title; the HTML modal uses .modal-title only
-	// because a webview overlay has no caption. So the invariant that survives the
-	// difference is that nothing sits above the first field's label.
+	// is where a native window puts a title. Neither implementation repeats it
+	// inside the card now, so the only Statics left are the grid labels.
 	var statics []stChild
 	for _, c := range kids {
 		if c.class == "Static" && c.visible {
 			statics = append(statics, c)
 		}
 	}
-	if len(statics) == 0 {
-		t.Fatal("UI BUG: no SS_RIGHT grid labels - .form-grid lost its label column")
+	if len(labels) == 0 {
+		t.Fatal("UI BUG: no grid labels - .form-grid lost its label column")
+	}
+	if len(statics) != len(labels) {
+		t.Errorf("UI BUG: %d Statics drawn but only %d grid labels - something else, such as an in-card heading, is on the form",
+			len(statics), len(labels))
 	}
 	if len(labels) != len(fields) {
 		t.Errorf("UI BUG: %d grid labels for %d fields; every field needs its label cell", len(labels), len(fields))
