@@ -77,14 +77,45 @@ prepare_syso() {
         echo "WARNING: wails3 CLI not found; building without the icon/DPI manifest" >&2
         return 0
     fi
+    local rendered="build/windows/info.generated.json"
+    if ! render_info "build/windows/info.json" "$rendered"; then
+        return 0
+    fi
     wails3 generate syso -arch amd64 \
         -icon build/windows/icon.ico \
-        -info build/windows/info.json \
+        -info "$rendered" \
         -manifest build/windows/wails.exe.manifest \
         -out "$syso" || {
         echo "WARNING: could not generate $syso" >&2
         rm -f "$syso"
     }
+}
+
+render_info() {
+    # build/windows/info.json still uses the v2 {{.Info.*}} placeholders, but
+    # v3's CLI compiles that file verbatim: left alone, the exe's version
+    # resource reads "{{.Info.ProductVersion}}" in Explorer's Details tab. So
+    # fill the placeholders from wails.json first and hand the CLI the result.
+    local tmpl="$1" out="$2"
+    local product_version company_name product_name copyright
+    product_version=$(json_info productVersion)
+    company_name=$(json_info companyName)
+    product_name=$(json_info productName)
+    copyright=$(json_info copyright)
+    if [ -z "$product_version" ]; then
+        echo "WARNING: no info.productVersion in wails.json; building without a version resource" >&2
+        return 1
+    fi
+    sed -e "s|{{\.Info\.ProductVersion}}|$product_version|g" \
+        -e "s|{{\.Info\.CompanyName}}|$company_name|g" \
+        -e "s|{{\.Info\.ProductName}}|$product_name|g" \
+        -e "s|{{\.Info\.Copyright}}|$copyright|g" \
+        -e "s|{{\.Info\.Comments}}||g" \
+        "$tmpl" > "$out"
+}
+
+json_info() {
+    sed -n 's/.*"'$1'"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' wails.json | head -1
 }
 
 prepare_rules
