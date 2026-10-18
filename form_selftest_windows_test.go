@@ -267,6 +267,13 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 		return
 	}
 	c.ok("the add button opened the editor in a window of its own")
+	// The form is the main window's, not a stranger on the desktop: the window
+	// manager is what keeps it on top, so check the relationship rather than
+	// trusting that it looks right in a screenshot.
+	c.check(ownerOf(node) == hwndOf(a.mainWindow),
+		"the editor is owned by the main window: main=%x node=%x owner=%x",
+		hwndOf(a.mainWindow), hwndOf(node), ownerOf(node))
+	c.check(aboveInStack(node, win), "the editor starts out above the main window")
 	// PrintWindow on a window that has only just been shown comes out black: the
 	// page is loaded (the probe above answered) but the compositor has not drawn
 	// a frame yet, so give it one before asking for the pixels.
@@ -479,6 +486,33 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 		c.check(afterX == beforeX && afterY == beforeY,
 			"the refusal does not move the window: %d,%d -> %d,%d", beforeX, beforeY, afterX, afterY)
 
+		// The other half of the classic relationship: pushing the list to the
+		// top of the z-order must not bury the form that is waiting for an
+		// answer. SetWindowPos rather than Focus because the foreground lock can
+		// veto SetForegroundWindow silently, and a veto would make this a test
+		// of nothing.
+		raiseToTop(win)
+		time.Sleep(400 * time.Millisecond)
+		c.check(aboveInStack(form, win),
+			"the settings window is still above the main window after the main window was raised")
+		c.shot(form, "form-above")
+
+		// Ownership ties stacking but not visibility: an owned window stays on
+		// screen when its owner is hidden, and this app hides the list to the
+		// tray. A form left behind would float there with no taskbar button of
+		// its own, so the app takes it along. Drive the app's own entry points
+		// rather than Show/Hide on the windows.
+		a.hideToTray()
+		time.Sleep(400 * time.Millisecond)
+		c.check(!win.IsVisible() && !form.IsVisible(),
+			"hiding to the tray takes the form with the list: main=%v form=%v",
+			win.IsVisible(), form.IsVisible())
+		a.showWindow()
+		time.Sleep(400 * time.Millisecond)
+		c.check(win.IsVisible() && form.IsVisible() && aboveInStack(form, win),
+			"reopening brings both back, the form on top: main=%v form=%v",
+			win.IsVisible(), form.IsVisible())
+
 		// With the settings window closed, the plus gets its editor again.
 		form.Close()
 		if !waitClosed(a, settingsWindowName, 5*time.Second) {
@@ -673,13 +707,15 @@ func gapOf(probeJSON string) int {
 	return out.Gap
 }
 
-// waitForm polls until a window with the given name exists. The click that
-// opens one goes through a binding, so the window appears some time after the
-// probe that sent the click.
+// waitForm polls until a window with the given name exists and has a native
+// handle. The click that opens one goes through a binding, so the window appears
+// some time after the probe that sent the click - and it is filed in the window
+// list a moment before the UI thread gets around to creating the HWND, which is
+// exactly when a stacking assertion would read 0 and call it a bug.
 func waitForm(a *App, name string, limit time.Duration) application.Window {
 	deadline := time.Now().Add(limit)
 	for time.Now().Before(deadline) {
-		if w := a.formByName(name); w != nil {
+		if w := a.formByName(name); w != nil && hwndOf(w) != 0 {
 			return w
 		}
 		time.Sleep(100 * time.Millisecond)
@@ -736,6 +772,39 @@ func sum(xs []int) int {
 		t += x
 	}
 	return t
+}
+
+// ---- stacking ----
+
+var stGetWindowProc = stUser32.NewProc("GetWindow")
+
+// hwndOf, ownerOf and raiseToTop live in owner_windows.go.
+//
+// gwHwndNext walks DOWN the z-order: the list is headed by the topmost window,
+// so the window beneath a given one is its "next".
+const gwHwndNext = 2
+
+// aboveInStack reports whether upper sits above lower in the real window order
+// by walking the "window beneath me" chain from upper until it reaches lower.
+// That chain crosses other processes' windows, so what matters is whether lower
+// turns up at all, not how far away it is.
+func aboveInStack(upper, lower application.Window) bool {
+	u, l := hwndOf(upper), hwndOf(lower)
+	if u == 0 || l == 0 {
+		return false
+	}
+	h := u
+	for i := 0; i < 4096; i++ {
+		r, _, _ := stGetWindowProc.Call(h, gwHwndNext)
+		if r == 0 {
+			return false
+		}
+		if r == l {
+			return true
+		}
+		h = r
+	}
+	return false
 }
 
 // ---- pixels ----

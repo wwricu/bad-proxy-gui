@@ -56,6 +56,19 @@ func (a *App) showWindow() {
 	a.mainWindow.UnMinimise()
 	a.mainWindow.Show()
 	a.mainWindow.Focus()
+	a.showFormWindow()
+}
+
+// hideToTray takes the windows off the screen and leaves the app running. The
+// form goes with the list because an owned window is not hidden along with its
+// owner: left behind it would float on the desktop with no taskbar button of its
+// own to reach it.
+func (a *App) hideToTray() {
+	a.hideFormWindow()
+	becomeBackground()
+	if a.mainWindow != nil {
+		a.mainWindow.Hide()
+	}
 }
 
 // quit stops the engine and exits, bypassing the hide-to-tray close guard.

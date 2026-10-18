@@ -84,8 +84,7 @@ func main() {
 	win.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
 		if app.trayOn && !app.quitting {
 			e.Cancel()
-			becomeBackground()
-			win.Hide()
+			app.hideToTray()
 		}
 	})
 

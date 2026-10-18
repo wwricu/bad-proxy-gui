@@ -48,6 +48,10 @@ func (a *App) openFormWindow(name, title, url string, height int) {
 		DisableResize: true,
 		URL:           url,
 	})
+	// A form belongs to the window it was called from, so the window manager
+	// keeps it above that one. Without this the list can be clicked into and
+	// bury the form it is supposed to be waiting for.
+	keepAbove(win, a.mainWindow)
 	// The list is in another window, so it has to be told to reread once this
 	// one is done writing. The hook runs for the native cross as well as for the
 	// Cancel button, which is the point: both are the window finishing its work.
@@ -113,4 +117,25 @@ func (a *App) anyFormWindow() application.Window {
 		}
 	}
 	return nil
+}
+
+// hideFormWindow and showFormWindow move the form with the list it belongs to.
+// A window hidden by the app is not taken out of the window list, so the form is
+// still found again on the way back - which matters, because it is the one
+// window holding a draft the user has not finished.
+func (a *App) hideFormWindow() {
+	if form := a.anyFormWindow(); form != nil {
+		form.Hide()
+	}
+}
+
+func (a *App) showFormWindow() {
+	form := a.anyFormWindow()
+	if form == nil {
+		return
+	}
+	form.Show()
+	// The form is the window still waiting for an answer, so it takes the
+	// floor when the app comes back.
+	form.Focus()
 }
