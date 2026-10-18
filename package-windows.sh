@@ -108,6 +108,11 @@ fi
 : > "$stage/.portable"
 
 rm -f "$out"
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \
-    "Compress-Archive -Force -Path '$stage' -DestinationPath '$out'" | tail -2
+# PowerShell's Compress-Archive writes entry names with backslashes. Only
+# Explorer forgives that: the ZIP spec mandates "/", and 7-Zip, tar and macOS
+# all read "bad-proxy-gui\bad-proxy-gui.exe" as one odd filename instead of a
+# folder. bsdtar has shipped in System32 since Win10 1803 and writes the real
+# separator; Git Bash is the shell here on this machine and on the runner, so
+# the MSYS spelling of its path is the one that resolves.
+/c/Windows/System32/tar.exe -a -cf "$out" -C "$(dirname "$stage")" "$(basename "$stage")"
 ls -l "$out" "$single"
