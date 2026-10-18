@@ -65,20 +65,7 @@ body {
     color: #697079;
 }
 
-.add-node-row {
-    padding: 8px 12px;
-    font-size: 13px;
-    color: #2f6f9f;
-    cursor: pointer;
-    border-top: 1px solid #e7eaef;
-    background: #f5f6f8;
-}
-
-.add-node-row:hover {
-    background: #e7eaef;
-}
-
-/* Status bar: read-only facts about the running engine, then the gear */
+/* Status bar: read-only facts about the running engine, then its actions */
 .status-bar {
     height: 44px;
     display: flex;
@@ -122,12 +109,41 @@ body {
 
 .status {
     flex: 1;
+    min-width: 0;
     font-size: 12px;
     color: #697079;
     text-align: right;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+/* The two actions share one corner and one box style, so the gear reads as the
+   second of a pair rather than a stray icon after a long row of facts. */
+.bar-actions {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-left: 12px;
+}
+
+.bar-btn {
+    height: 30px;
+    padding: 0 10px;
+    display: flex;
+    align-items: center;
+    background: white;
+    border: 1px solid #d2d7de;
+    border-radius: 6px;
+    font-size: 13px;
+    color: #2f6f9f;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.bar-btn:hover {
+    background: #e7eaef;
 }
 
 .gear-btn {
@@ -182,27 +198,25 @@ body {
 }
 
 /* Form windows: the settings sheet and the node editor are whole windows whose
-   only content is one card, so the card is the page. The window is fixed-size
-   and sized to the tallest form, which is why the old viewport-proportioned
-   ceiling is gone - there is nothing left to squeeze the card into. */
+   only content is one form. Drawing that form as a card inside them put a
+   grey gutter and a drop shadow around an area the window already is, so the
+   page background is the form's background and the form fills the window. */
 body.form-page {
     display: flex;
+    flex-direction: column;
     height: 100vh;
-    padding: 12px;
     /* auto, not hidden: a form that somehow does not fit stays reachable
        instead of being clipped by a window the user cannot resize. */
     overflow: auto;
 }
 
 .modal {
-    /* auto margins centre the card in both axes without the clipping that
-       align-items: centre causes once the content exceeds the container. */
-    margin: auto;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
     width: 100%;
-    background: white;
-    border-radius: 8px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.10);
-    padding: 16px;
+    padding: 14px 18px;
 }
 
 .form-grid {
@@ -282,6 +296,10 @@ body.form-page {
     display: flex;
     justify-content: flex-end;
     gap: 8px;
+    /* Not "auto": the buttons follow the fields, so a form shorter than its
+       window leaves the spare room under them, in the same colour as the rest
+       of the page. Pinned to the bottom edge it would open a band of nothing
+       through the middle of the form whenever a protocol hides a row. */
     margin-top: 16px;
 }
 

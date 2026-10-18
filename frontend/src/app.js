@@ -169,7 +169,7 @@ async function openFormWindow(add, idx) {
     }
 }
 
-document.getElementById('addNodeRow').onclick = () => openFormWindow(true, -1);
+document.getElementById('addNodeBtn').onclick = () => openFormWindow(true, -1);
 
 function editNode(idx) {
     openFormWindow(false, idx);

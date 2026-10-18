@@ -205,19 +205,25 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 			const bar = document.querySelector(".status-bar");
 			return {page: [d.scrollWidth, d.clientWidth, d.scrollHeight, d.clientHeight],
 					bar: [bar.clientWidth, bar.scrollWidth],
+					add: Math.round(document.getElementById("addNodeBtn").getBoundingClientRect().right),
+					inBar: !!document.querySelector(".status-bar #addNodeBtn"),
 					gear: Math.round(document.getElementById("gearBtn").getBoundingClientRect().right),
 					inner: d.clientWidth};
 		})()`)
 	var layout struct {
 		Page  [4]int `json:"page"`
 		Bar   [2]int `json:"bar"`
+		Add   int    `json:"add"`
+		InBar bool   `json:"inBar"`
 		Gear  int    `json:"gear"`
 		Inner int    `json:"inner"`
 	}
 	c.check(json.Unmarshal([]byte(fits), &layout) == nil, "the main window reports its own layout: %s", fits)
+	c.check(layout.InBar, "both actions live in the status bar")
 	if layout.Inner > 0 {
 		c.check(layout.Page[0] <= layout.Page[1]+1, "the page itself does not overflow: %v", layout.Page)
 		c.check(layout.Bar[1] <= layout.Bar[0]+1, "the status bar is not wider than the window: %v", layout.Bar)
+		c.check(layout.Add <= layout.Inner+1 && layout.Add < layout.Gear, "the add button is reachable: right=%d gear=%d inner=%d", layout.Add, layout.Gear, layout.Inner)
 		c.check(layout.Gear <= layout.Inner+1, "the gear is still reachable: right=%d inner=%d", layout.Gear, layout.Inner)
 	}
 	c.shot(a.mainWindow, "main-minimum")
@@ -247,7 +253,32 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 		"xhttp offers every optional field: %s", fields)
 	c.check(strings.Contains(fields, `"scroll":false`),
 		"the tallest form needs no scrollbar: %s", fields)
+	// PrintWindow on a window that has only just been shown comes out black:
+	// the page is loaded (the probes above answered) but the compositor has not
+	// drawn a frame yet, so give it one before asking for the pixels.
+	time.Sleep(1500 * time.Millisecond)
 	c.shot(node, "node-add")
+
+	// A protocol that hides a row has to take the buttons with it: the form
+	// flows from the top, so the spare room belongs under the actions, not in
+	// the middle of the fields.
+	trimmed := probe(node, probes, `
+		(() => {
+			const sel = document.getElementById("fProtocol");
+			sel.value = "socks";
+			sel.dispatchEvent(new Event("change"));
+			const hidden = (id) => getComputedStyle(document.getElementById(id)).display === "none";
+			const actions = document.querySelector(".modal-actions").getBoundingClientRect();
+			const out = {hidden: ["fSecret","fAuthority","fPath","fPadding"].filter(hidden),
+					fits: actions.bottom <= document.body.clientHeight,
+					scroll: document.body.scrollHeight > document.body.clientHeight};
+			sel.value = "vless";
+			sel.dispatchEvent(new Event("change"));
+			return out;
+		})()`)
+	c.check(strings.Contains(trimmed, `"hidden":["fSecret"]`), "socks hides only the secret: %s", trimmed)
+	c.check(strings.Contains(trimmed, `"fits":true`) && strings.Contains(trimmed, `"scroll":false`),
+		"a shorter form keeps its buttons inside the window: %s", trimmed)
 
 	// The validation is synchronous, so the click and the read are one pass.
 	refusal := probe(node, probes, `
