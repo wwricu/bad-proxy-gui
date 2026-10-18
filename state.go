@@ -24,10 +24,6 @@ type Node struct {
 	Path      string `json:"path"`      // xhttp request path
 	Authority string `json:"authority"` // SNI / Host, defaults to Server
 	Padding   string `json:"padding"`   // xhttp X-Padding range
-
-	// Deprecated: no longer read or written. Kept as a private field so that
-	// json.Unmarshal silently absorbs old "tls" keys instead of erroring out.
-	tlsLegacy bool `json:"-"`
 }
 
 // Routing modes are the presets the UI exposes. They only take effect in the

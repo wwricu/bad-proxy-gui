@@ -100,7 +100,8 @@ go build -tags production -trimpath -ldflags "-s -w -H windowsgui" -o "build/bin
 cp "build/bin/$app.exe" "$stage/"
 cp "build/bin/$app.exe" "$single"
 
-prepare_rules
+# rules.dat was already ensured before the build; an empty placeholder is not
+# worth shipping beside the exe, since the embedded copy is just as empty.
 if [ -s "$rules" ]; then
     cp "$rules" "$stage/"
 fi

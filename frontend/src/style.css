@@ -361,10 +361,6 @@ body.form-page {
     text-align: left;
 }
 
-.checkbox-row.muted label {
-    color: #8a929c;
-}
-
 /* The card's own message line. A setting that failed to take effect is read
    here, next to the box that caused it, not on the main window's bar after the
    card is gone. */
