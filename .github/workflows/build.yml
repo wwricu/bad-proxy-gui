@@ -67,8 +67,13 @@ jobs:
           CGO_ENABLED: "1"
         run: |
           mkdir -p build
-          GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags "-s -w" -o build/bad-proxy-gui-arm64 .
-          GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o build/bad-proxy-gui-amd64 .
+          # -tags production is not an optimisation, it is the only build that
+          # has a window: without it the Wails backend resolves to a stub whose
+          # CreateApp returns an error, so the binary compiles, links, signs and
+          # then prints "Wails applications will not build without the correct
+          # build tags" and exits - a double-click on the .app does nothing.
+          GOOS=darwin GOARCH=arm64 go build -tags production -trimpath -ldflags "-s -w" -o build/bad-proxy-gui-arm64 .
+          GOOS=darwin GOARCH=amd64 go build -tags production -trimpath -ldflags "-s -w" -o build/bad-proxy-gui-amd64 .
           lipo -create -output build/bad-proxy-gui-universal build/bad-proxy-gui-arm64 build/bad-proxy-gui-amd64
       - name: Assemble .app bundle
         run: |

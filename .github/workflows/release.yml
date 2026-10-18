@@ -64,8 +64,10 @@ jobs:
           CGO_ENABLED: "1"
         run: |
           mkdir -p build
-          GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags "-s -w" -o build/bad-proxy-gui-arm64 .
-          GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o build/bad-proxy-gui-amd64 .
+          # -tags production: without it the Wails backend is a stub that errors
+          # out at startup, so the .app opens nothing. Keep in step with build.yml.
+          GOOS=darwin GOARCH=arm64 go build -tags production -trimpath -ldflags "-s -w" -o build/bad-proxy-gui-arm64 .
+          GOOS=darwin GOARCH=amd64 go build -tags production -trimpath -ldflags "-s -w" -o build/bad-proxy-gui-amd64 .
           lipo -create -output build/bad-proxy-gui-universal build/bad-proxy-gui-arm64 build/bad-proxy-gui-amd64
           lipo -info build/bad-proxy-gui-universal
       - name: Assemble .app bundle
