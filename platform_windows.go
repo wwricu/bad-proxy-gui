@@ -10,3 +10,6 @@ const hasTray = true
 // hidden, closing the window falls through to quit rather than hiding
 // invisibly.
 const trayCanHide = true
+
+// trayTitle is the label the notification-area icon carries.
+const trayTitle = "Bad Proxy"

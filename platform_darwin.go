@@ -8,3 +8,7 @@ package main
 const hasTray = true
 
 const trayCanHide = false
+
+// trayTitle is empty on macOS: AppKit renders a status item's title as text
+// next to the icon, and the menu-bar item is signed off as icon-only.
+const trayTitle = ""

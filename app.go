@@ -32,6 +32,10 @@ func (a *App) startup(ctx context.Context) {
 		a.trayOn = true
 		go startTray(a.showWindow, a.quit)
 	}
+	// Closing the window only hides it, so the app must recover on its own when
+	// macOS re-activates it (Finder double-click). Watched natively; no-op off
+	// macOS.
+	watchReopen(windowTitle)
 	// A run that was killed rather than closed left the system resolver pointed
 	// at this app's DNS port. Fix that before anything else touches the network.
 	a.recoverTunToken()
