@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+    <!-- The app icon's source of truth: render-icon.sh turns this into
+         build/appicon.png, which becomes the macOS .icns and the non-Windows
+         tray icon, and build/windows/icon.ico is generated from that png.
+
+         Full bleed on purpose. The Wails default shipped a small white tile
+         with a drop shadow floating in a transparent canvas, which reads as a
+         postage stamp on the taskbar and in the Dock. -->
+    <rect width="1024" height="1024" rx="200" fill="#2f6f9f"/>
+    <text x="535" y="495" text-anchor="middle" dominant-baseline="central"
+          font-family="'Arial Black', 'Segoe UI Black', sans-serif" font-weight="900"
+          font-size="740" fill="#ffffff">B</text>
+</svg>
