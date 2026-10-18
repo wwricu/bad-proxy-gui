@@ -1,0 +1,53 @@
+//go:build darwin
+
+// AppKit only lets the process main thread create a window. Two of our macOS
+// entry points break that rule by accident: Wails occupies the main thread with
+// [NSApp run], so anything we call from a goroutine lands on a worker thread -
+// and both systray's nativeStart (the status item owns an NSStatusBarWindow)
+// and the becomeForeground/becomeBackground calls reach into AppKit from there.
+// The result is an NSInternalInconsistencyException, not a returned error, so
+// the process dies before any Go-side handling can see it.
+//
+// The task therefore has to be handed back to the run loop Wails already owns.
+// //export confines this file's preamble to declarations, which is why the
+// dispatch block itself lives in mainthread_darwin.m.
+package main
+
+/*
+extern void badproxyMainTask(void);
+void badproxyRunOnMain(void);
+int badproxyIsMainThread(void);
+*/
+import "C"
+
+// mainQueue holds the work waiting for the main thread. A channel is what keeps
+// concurrent callers from overwriting each other's task: each dispatch_async
+// pops exactly one entry, so pushes and pops balance and every caller runs its
+// own closure.
+var mainQueue = make(chan func(), 16)
+
+//export badproxyMainTask
+func badproxyMainTask() {
+	select {
+	case fn := <-mainQueue:
+		fn()
+	default:
+	}
+}
+
+// runOnMainThread runs fn on the main thread and waits for it to finish.
+// Already on that thread, it runs inline: queueing and then waiting on the very
+// loop we are standing in would deadlock.
+func runOnMainThread(fn func()) {
+	if C.badproxyIsMainThread() == 1 {
+		fn()
+		return
+	}
+	done := make(chan struct{})
+	mainQueue <- func() {
+		fn()
+		close(done)
+	}
+	C.badproxyRunOnMain()
+	<-done
+}

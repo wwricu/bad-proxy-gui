@@ -37,10 +37,17 @@ import "C"
 
 import "unsafe"
 
+// Both entry points touch NSApp and its windows, so they hop to the main thread
+// before calling in: they are reached from tray callbacks and from Wails'
+// lifecycle hooks, neither of which runs there.
 func becomeForeground(title string) {
 	ct := C.CString(title)
-	defer C.free(unsafe.Pointer(ct))
-	C.becomeForeground(ct)
+	runOnMainThread(func() {
+		defer C.free(unsafe.Pointer(ct))
+		C.becomeForeground(ct)
+	})
 }
 
-func becomeBackground() { C.becomeBackground() }
+func becomeBackground() {
+	runOnMainThread(func() { C.becomeBackground() })
+}
