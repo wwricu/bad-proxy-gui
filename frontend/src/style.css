@@ -86,22 +86,28 @@ body {
     padding: 0 12px;
     background: #eef1f4;
     border-top: 1px solid #d2d7de;
-    gap: 10px;
+    gap: 0;
 }
 
+/* Facts are text on the bar, not fields on it: a white box with a border is
+   what every input here looks like, and none of this can be typed into. The
+   hairline between pairs is what a native status bar uses to group columns. */
 .readout {
     display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 4px 10px;
-    background: white;
-    border: 1px solid #d2d7de;
-    border-radius: 6px;
+    align-items: baseline;
+    gap: 6px;
+    padding: 0 12px;
     white-space: nowrap;
+    border-left: 1px solid #dcdfe4;
+}
+
+.readout:first-of-type {
+    padding-left: 0;
+    border-left: none;
 }
 
 .readout label {
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 600;
     letter-spacing: 0.03em;
     color: #8a929c;
@@ -111,6 +117,7 @@ body {
 .readout span {
     font-size: 13px;
     color: #22262b;
+    font-variant-numeric: tabular-nums;
 }
 
 .status {
@@ -187,7 +194,9 @@ body {
 
 .modal {
     width: 380px;
-    max-height: 90vh;
+    /* A percentage ceiling made the tallest card scroll at the window's minimum
+       size: the card needs a fixed margin, not nine tenths of whatever is left. */
+    max-height: calc(100vh - 24px);
     overflow-y: auto;
     background: white;
     border-radius: 8px;
@@ -247,6 +256,25 @@ body {
 
 .checkbox-row.muted label {
     color: #8a929c;
+}
+
+/* The card's own message line. A setting that failed to take effect is read
+   here, next to the box that caused it, not on the main window's bar after the
+   card is gone. */
+.form-msg {
+    margin-top: 10px;
+    font-size: 12px;
+    line-height: 1.35;
+    color: #c0392b;
+    white-space: pre-wrap;
+}
+
+.form-msg:empty {
+    display: none;
+}
+
+.form-msg.busy {
+    color: #697079;
 }
 
 .modal-actions {

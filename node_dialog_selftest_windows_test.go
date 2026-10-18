@@ -59,8 +59,11 @@ var (
 	stGetWindowText    = stUser32.NewProc("GetWindowTextW")
 	stGetWindowDC      = stUser32.NewProc("GetWindowDC")
 	stReleaseDC        = stUser32.NewProc("ReleaseDC")
-	stPrintWindow      = stUser32.NewProc("PrintWindow")
 	stSetForeground    = stUser32.NewProc("SetForegroundWindow")
+	stSetWindowPos     = stUser32.NewProc("SetWindowPos")
+	stWindowFromPoint  = stUser32.NewProc("WindowFromPoint")
+	stSetProcDpiCtx    = stUser32.NewProc("SetProcessDpiAwarenessContext")
+	stSetProcDpi       = stUser32.NewProc("SetProcessDPIAware")
 
 	stGdi32          = syscall.NewLazyDLL("gdi32.dll")
 	stCreateCompDC   = stGdi32.NewProc("CreateCompatibleDC")
@@ -75,6 +78,23 @@ var (
 	stGWLStyle   = -16
 	stGWLExStyle = -20
 )
+
+// stDPIPerMonitorV2 is (DPI_AWARENESS_CONTEXT)-4. The packaged app declares this
+// in build/windows/wails.exe.manifest, so the test process has to ask for it at
+// runtime - a test binary has no embedded manifest.
+const stDPIPerMonitorV2 = ^uintptr(3)
+
+// The checks below measure rects and pixels of a real window. A DPI-unaware
+// process on a scaled display gets every rect virtualized back to 96 DPI while
+// PrintWindow fills physical pixels, so the geometry assertions compare numbers
+// the user never sees and the colour sampler reads the wrong pixels entirely.
+// Being aware the way the app is makes both agree.
+func TestMain(m *testing.M) {
+	if r, _, _ := stSetProcDpiCtx.Call(stDPIPerMonitorV2); r == 0 {
+		stSetProcDpi.Call()
+	}
+	os.Exit(m.Run())
+}
 
 // Geometry the HTML modal uses, so the native editor is checked against the
 // same numbers instead of against itself.
@@ -220,36 +240,80 @@ func stText(hwnd uintptr) string {
 	return syscall.UTF16ToString(buf)
 }
 
-// stShot paints hwnd into a PNG through PrintWindow and hands back the pixels.
+// stShot grabs hwnd's rectangle off the desktop and hands back the pixels.
 // Everything else about this dialog is asserted numerically; the picture is the
 // only way to check what the user will actually see - colours, fonts, and
 // whether the web-style buttons really are the web-style buttons.
+//
+// PrintWindow cannot be used for this. The field frames are drawn by the form's
+// own WM_PAINT and PrintWindow asks a window for WM_PRINTCLIENT instead, so it
+// returns a bitmap with an empty client area: every border reads as #000000 and
+// the colour checks fail on a form that looks exactly right on screen.
 func stShot(t *testing.T, hwnd uintptr, name string) *image.RGBA {
-	return stShotMode(t, hwnd, name, false)
+	// A desktop grab is only honest while nothing is painted over the window, and
+	// a test process is not allowed to take the foreground, so raise it the way a
+	// dialog is raised and put it back afterwards.
+	const (
+		stHwndTopmost = ^uintptr(0) // HWND_TOPMOST
+		stHwndNoTop   = ^uintptr(1) // HWND_NOTOPMOST
+		stSwpNoMove   = 0x0002
+		stSwpNoSize   = 0x0001
+		stSwpShowWin  = 0x0040
+	)
+	stSetWindowPos.Call(hwnd, stHwndTopmost, 0, 0, 0, 0,
+		stSwpNoMove|stSwpNoSize|stSwpShowWin)
+	stSetForeground.Call(hwnd)
+	time.Sleep(300 * time.Millisecond)
+	defer stSetWindowPos.Call(hwnd, stHwndNoTop, 0, 0, 0, 0, stSwpNoMove|stSwpNoSize)
+	if !stOnTop(t, hwnd) {
+		return nil
+	}
+	return stGrab(t, hwnd, name)
 }
 
-// stShotScreen grabs the window's rectangle off the desktop instead of asking
-// it to redraw itself, for the rare case where PrintWindow and the screen
-// disagree.
+// stOnTop fails loudly rather than measuring somebody else's window: a grab of
+// an occluded rectangle looks like a pass while proving nothing.
+func stOnTop(t *testing.T, hwnd uintptr) bool {
+	l, tp, r, b := stRect(hwnd)
+	pt := uintptr(uint32((l+r)/2)) | uintptr(uint32((tp+b)/2))<<32
+	hit, _, _ := stWindowFromPoint.Call(pt)
+	if hit == 0 {
+		t.Errorf("BUG: nothing is under the dialog's centre - it is not on screen")
+		return false
+	}
+	if hit == hwnd {
+		return true
+	}
+	for _, c := range stChildren(hwnd) {
+		if c.hwnd == hit {
+			return true
+		}
+	}
+	t.Errorf("BUG: %s is on top of the dialog at its centre, so a desktop grab measures the wrong window", stClassName(hit))
+	return false
+}
+
+// stShotScreen grabs without touching the Z order, for a composite shot where
+// raising one window would leave the other where it was.
 func stShotScreen(t *testing.T, hwnd uintptr, name string) *image.RGBA {
-	return stShotMode(t, hwnd, name, true)
+	return stGrab(t, hwnd, name)
 }
 
-// stCapture redraws hwnd into an in-memory RGBA bitmap.
-func stCapture(t *testing.T, hwnd uintptr, fromDesktop bool) *image.RGBA {
+// stGrab copies the desktop pixels under hwnd's window rect into an RGBA bitmap,
+// and writes a PNG when BADPROXY_GUI_SHOT=1 so a human can look at it too.
+func stGrab(t *testing.T, hwnd uintptr, name string) *image.RGBA {
 	l, tp, r, b := stRect(hwnd)
 	w, h := int(r-l), int(b-tp)
 	if w <= 0 || h <= 0 {
 		t.Errorf("BUG: cannot capture a %dx%d window", w, h)
 		return nil
 	}
-	owner := hwnd
-	srcDC, _, _ := stGetWindowDC.Call(owner)
-	if fromDesktop {
-		owner = 0 // GetDC(NULL) == the whole screen
-		srcDC, _, _ = stGetWindowDC.Call(owner)
+	srcDC, _, _ := stGetWindowDC.Call(0) // GetDC(NULL) == the whole screen
+	if srcDC == 0 {
+		t.Errorf("BUG: no screen device context")
+		return nil
 	}
-	defer stReleaseDC.Call(owner, srcDC)
+	defer stReleaseDC.Call(0, srcDC)
 	memDC, _, _ := stCreateCompDC.Call(srcDC)
 	defer stDeleteDC.Call(memDC)
 	bmp, _, _ := stCreateCompBmp.Call(srcDC, uintptr(w), uintptr(h))
@@ -259,12 +323,8 @@ func stCapture(t *testing.T, hwnd uintptr, fromDesktop bool) *image.RGBA {
 	}
 	defer stDeleteObj.Call(bmp)
 	stSelect.Call(memDC, bmp)
-	if fromDesktop {
-		// SRCCOPY: copy the desktop pixels under the window rect.
-		stBitBlt.Call(memDC, 0, 0, uintptr(w), uintptr(h), srcDC, uintptr(l), uintptr(tp), 0x00CC0020)
-	} else {
-		stPrintWindow.Call(hwnd, memDC, 2) // PW_RENDERFULLCONTENT
-	}
+	// SRCCOPY.
+	stBitBlt.Call(memDC, 0, 0, uintptr(w), uintptr(h), srcDC, uintptr(l), uintptr(tp), 0x00CC0020)
 
 	bi := stBitmapInfoHeader{}
 	bi.size = uint32(unsafe.Sizeof(bi))
@@ -283,12 +343,7 @@ func stCapture(t *testing.T, hwnd uintptr, fromDesktop bool) *image.RGBA {
 		img.Pix[i*4+2] = pixels[i*4+0]
 		img.Pix[i*4+3] = 0xFF
 	}
-	return img
-}
-
-func stShotMode(t *testing.T, hwnd uintptr, name string, fromDesktop bool) *image.RGBA {
-	img := stCapture(t, hwnd, fromDesktop)
-	if img == nil || os.Getenv("BADPROXY_GUI_SHOT") != "1" {
+	if os.Getenv("BADPROXY_GUI_SHOT") != "1" {
 		return img
 	}
 	path := filepath.Join(os.TempDir(), name+".png")
@@ -655,9 +710,9 @@ func TestNodeDialogSelfTest(t *testing.T) {
 	}
 	stCheckGrid(t, hwnd, kids, img, wantSaveText)
 
-	// PrintWindow renders some common controls differently from the screen (it
-	// drops the EDIT frame), so a real desktop grab is the only way to see what a
-	// user sees. Set BADPROXY_GUI_HOLD=20 and grab the window rect meanwhile.
+	// Leave the window up so a person can look at it too: the automated checks
+	// cover geometry and border colours, not whether the whole thing reads right.
+	// Set BADPROXY_GUI_HOLD=20 and the dialog stays for 20s.
 	if hold := os.Getenv("BADPROXY_GUI_HOLD"); hold != "" {
 		d, err := time.ParseDuration(hold + "s")
 		if err != nil || d <= 0 {
@@ -871,6 +926,14 @@ func TestNodeDialogOwnerLeftAlign(t *testing.T) {
 		title, _ := syscall.UTF16PtrFromString(windowTitle)
 		hwnd, _, err := ndCreateWin.Call(0, uintptr(unsafe.Pointer(className)), uintptr(unsafe.Pointer(title)),
 			0, ownerX, ownerY, ownerW, ownerH, 0, 0, hInst, 0)
+		// ownerW/ownerH are the app's own window size, which is written in logical
+		// pixels, but a DPI-aware process hands CreateWindowExW physical ones. Scale
+		// the stand-in once its handle can be asked, or the placement checks below
+		// compare a 700px window against a dialog laid out for 175%.
+		if d := int(ndDpi(hwnd)); d != ndDefaultDpi {
+			stSetWindowPos.Call(hwnd, 0, uintptr(ownerX), uintptr(ownerY),
+				uintptr(ownerW*d/ndDefaultDpi), uintptr(ownerH*d/ndDefaultDpi), 0x0004)
+		}
 		ndShowWnd.Call(hwnd, ndSWShow)
 		ownerReady <- ownerWin{hwnd: uintptr(hwnd), err: err}
 		for {
@@ -922,15 +985,17 @@ func TestNodeDialogOwnerLeftAlign(t *testing.T) {
 	} else {
 		t.Logf("left align ok: dialog.left=%d owner.left=%d pad*scale=%d", dl, ol, int(dl)-int(ol))
 	}
-	// Vertical is deliberately a sanity check, not an exact centre: the native
-	// form positions itself from a 640px creation estimate and then resize()
-	// shrinks to the real field count while keeping the top, so the finished
-	// window never sits at the exact midpoint of the owner. We only require it
-	// to stay on screen and overlap the owner, which is what the user sees.
+	// Vertical: the form is created at an estimated height and re-centred when
+	// layout() sizes it for real, so the finished dialog sits on the owner's
+	// midpoint. 8px allows for the non-client rounding in outer().
+	if dc, oc := (int(dt)+int(db))/2, (int(ot)+int(obottom))/2; absInt(dc-oc) > 8 {
+		t.Errorf("UI BUG: dialog vertical centre=%d, owner centre=%d - the editor is [%d,%d] against owner [%d,%d]",
+			dc, oc, dt, db, ot, obottom)
+	} else {
+		t.Logf("vertical ok: dialog [%d,%d] centre %d, owner centre %d", dt, db, dc, oc)
+	}
 	if int(dt) < int(ot) || int(db) > int(obottom) {
 		t.Errorf("UI BUG: dialog vertical [%d,%d] falls outside the owner [%d,%d]", dt, db, ot, obottom)
-	} else {
-		t.Logf("vertical ok: dialog [%d,%d] within owner [%d,%d]", dt, db, ot, obottom)
 	}
 	if int(dr) > int(oright) {
 		t.Errorf("UI BUG: dialog right=%d sticks out past the owner right=%d", dr, oright)

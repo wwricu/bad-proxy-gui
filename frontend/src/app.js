@@ -256,17 +256,22 @@ async function editNode(idx) {
 
 // ---- settings window ----
 
+// setFormMsg writes the settings card's own message line. A setting that failed
+// to take effect belongs beside the box that caused it, and the card is what the
+// user is looking at when it fails, so this replaces the old status-bar report.
+function setFormMsg(text, busy) {
+    const el = document.getElementById('sMsg');
+    el.textContent = text || '';
+    el.classList.toggle('busy', !!busy);
+}
+
 // openSettings picks the backend the same way the node editor does: a real OS
 // window where Wails can hand one over (Windows), the in-page card elsewhere.
 async function openSettings() {
     if (platformInfo && platformInfo.settingsDialog) {
-        try {
-            await API().SettingsUI();
-        } catch (err) {
-            // Everything up to the failing step did apply, and the state file
-            // already holds the draft, so the bar has to be re-read either way.
-            setStatus(err.message);
-        }
+        // The native window applies its own draft and reports a refusal on its
+        // own message line, so there is nothing to say out here.
+        await API().SettingsUI();
         await loadState();
         return;
     }
@@ -290,6 +295,7 @@ async function openSettings() {
     if (sysOpt && platformInfo && !platformInfo.systemProxySupported) sysOpt.remove();
 
     syncTunRow();
+    setFormMsg('');
     document.getElementById('settingsOverlay').style.display = 'flex';
     document.getElementById('sHttpPort').focus();
 }
@@ -312,7 +318,6 @@ document.getElementById('gearBtn').onclick = openSettings;
 
 document.getElementById('settingsCancel').onclick = () => {
     document.getElementById('settingsOverlay').style.display = 'none';
-    setStatus('');
 };
 
 document.getElementById('settingsOK').onclick = async () => {
@@ -331,18 +336,19 @@ document.getElementById('settingsOK').onclick = async () => {
     // while OK is in flight.
     const btn = document.getElementById('settingsOK');
     btn.disabled = true;
-    setStatus('Applying...');
+    setFormMsg('Applying...', true);
     try {
         await API().ApplySettings(draft);
         document.getElementById('settingsOverlay').style.display = 'none';
-        setStatus('');
     } catch (err) {
-        // The card stays open with what the user typed: an error here means
-        // nothing of it took effect except what ApplySettings got to.
-        setStatus(err.message);
+        // The card stays open with what the user typed. The tunnel is the
+        // setting that fails after the engine is already moving - it needs an
+        // adapter and an elevation the user may decline - and its reason is
+        // worthless on the status bar once the window is gone.
+        setFormMsg(err.message);
+        await loadState();
     }
     btn.disabled = false;
-    await loadState();
 };
 
 // ---- nodes ----

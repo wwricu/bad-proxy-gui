@@ -64,6 +64,7 @@ var (
 	ndBeginPaint    = ndUser32.NewProc("BeginPaint")
 	ndEndPaint      = ndUser32.NewProc("EndPaint")
 	ndInvalidate    = ndUser32.NewProc("InvalidateRect")
+	ndUpdateWnd     = ndUser32.NewProc("UpdateWindow")
 )
 
 const (
@@ -145,6 +146,7 @@ const (
 const (
 	ndClrText   = 0x2B2622 // #22262b, kept as COLORREF 0x00BBGGRR
 	ndClrLabel  = 0x797069 // #697079
+	ndClrDanger = 0x2B39C0 // #c0392b, .ctx-item.danger
 	ndClrBorder = 0xDED7D2 // #d2d7de
 	ndClrAccent = 0x9F6F2F // #2f6f9f, .btn-primary
 	ndClrDeep   = 0x8A6028 // #28608a, .btn-primary:hover
@@ -156,6 +158,7 @@ const (
 	ndColGap      = 10
 	ndRowGap      = 8  // .form-grid row-gap
 	ndInputH      = 26 // 13px text + 6px padding + 1px border
+	ndMsgH        = 34 // two wrapped lines of the inline message row
 	ndActionsGap  = 16 // .modal-actions margin-top
 	ndBtnGap      = 8
 	ndBtnH        = 28 // 13px text + 6px padding + 2px border
@@ -189,6 +192,7 @@ type ndRow struct {
 	drop    int  // extra height a COMBOBOX needs for its list (0 for others)
 	frame   bool // the parent draws a .form-grid border around this row
 	check   bool // captioned check box: no label column, no frame
+	msg     bool // inline message line: spans the card like a check box
 	height  int  // CSS px, 0 = ndInputH
 }
 
@@ -227,8 +231,14 @@ type ndForm struct {
 	labelID map[uintptr]int // STATIC handle -> the field id it labels
 	inputs  map[int]uintptr
 	vis     map[int]bool
-	proved  bool
-	closed  bool
+	// msgID is the control id of the inline message line this form may own, and
+	// msgDanger whether that line currently reads as an error.
+	msgID     int
+	msgRow    *ndRow
+	msgDanger bool
+	sized     bool // the first real sizing has re-placed the window
+	proved    bool
+	closed    bool
 }
 
 var (
@@ -632,6 +642,15 @@ func ndWndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 // colorFor maps a STATIC to its CSS colour: grid labels are muted, everything
 // else uses the body text colour.
 func (f *ndForm) colorFor(ctrl uintptr) uintptr {
+	// The inline message line owns its own colour: red for a failure the user
+	// has to act on, body text for the transient "Applying" note. Without a
+	// message row f.inputs[0] is 0 and no control handle can match it.
+	if ctrl == f.inputs[f.msgID] {
+		if f.msgDanger {
+			return ndClrDanger
+		}
+		return ndClrText
+	}
 	if _, ok := f.labelID[ctrl]; ok {
 		return ndClrLabel
 	}
@@ -729,6 +748,38 @@ func (f *ndForm) addCheckRow(caption string, id int, cur bool) {
 	f.rows = append(f.rows, &ndRow{input: cb, visID: id, visible: f.visFor(id), check: true})
 }
 
+// addMsgRow appends the inline message line: a full-width static under the
+// fields, hidden until something has to be said. A form without a message gets
+// no dead space because the row starts invisible and layout skips it.
+func (f *ndForm) addMsgRow(id int) {
+	// SS_LEFT (style 0) wraps, so a long engine or TUN error still reads whole
+	// inside the card instead of running off the right edge.
+	h := f.createEx("STATIC", "", id, 0, 0, f.font, false)
+	f.msgID = id
+	f.msgRow = &ndRow{input: h, visID: id, visible: false, height: ndMsgH, msg: true}
+	f.rows = append(f.rows, f.msgRow)
+}
+
+// setMessage shows or clears that line. The window is re-flowed rather than
+// merely repainted because a message changes how tall the dialog has to be.
+func (f *ndForm) setMessage(s string, danger bool) {
+	if f.msgRow == nil {
+		return
+	}
+	f.msgDanger = danger
+	f.setTxt(f.msgID, s)
+	if vis := s != ""; vis != f.msgRow.visible {
+		f.msgRow.visible = vis
+		f.layout()
+	} else {
+		ndInvalidate.Call(f.hwnd, 0, 1)
+	}
+	// A long-running OK (a UAC prompt for the tunnel) happens to look exactly
+	// like a frozen window unless this is drawn now, on this thread, before the
+	// call starts.
+	ndUpdateWnd.Call(f.hwnd)
+}
+
 func (f *ndForm) visFor(id int) bool {
 	if v, ok := f.vis[id]; ok {
 		return v
@@ -760,7 +811,9 @@ func (f *ndForm) layout() {
 			rowH = f.px(r.height)
 		}
 		switch {
-		case r.check:
+		case r.check, r.msg:
+			// A check box and the message line both span the card: neither has a
+			// label column to line its text up against.
 			ndMoveWnd.Call(r.input, ndU(labelX), ndU(y), uintptr(cardW-2*labelX), uintptr(rowH), 1)
 		case r.frame:
 			// The control sits inside the border the parent paints at this
@@ -826,7 +879,17 @@ func (f *ndForm) resize(clientH int) {
 	// width too: leaving it at the 96-DPI value clips the right-hand column of
 	// every control on a scaled display.
 	outerW, outerH := f.outer(f.px(ndClientW), clientH)
-	ndMoveWnd.Call(f.hwnd, uintptr(r.l), uintptr(r.top), uintptr(outerW), uintptr(outerH), 1)
+	l, t := int(r.l), int(r.top)
+	if !f.sized {
+		// The height it was positioned with is an estimate, so the first sizing
+		// to the real height has to redo the placement as well: keeping the top
+		// left the finished dialog a hundred pixels above the main window it is
+		// meant to sit on. After that the top stays put, which is what a form
+		// that grows a row should do.
+		f.sized = true
+		l, t = f.center(outerW, outerH)
+	}
+	ndMoveWnd.Call(f.hwnd, ndU(l), ndU(t), uintptr(outerW), uintptr(outerH), 1)
 }
 
 // textWidth measures a button caption in the body font, so the button is sized

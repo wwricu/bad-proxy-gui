@@ -121,13 +121,12 @@ func (a *App) ApplySettings(s Settings) error {
 	return nil
 }
 
-// SettingsUI opens the settings window and applies what it returns. Like the
-// node editor it is a no-op where settingsDialogSupported is false: the
-// frontend keeps the HTML card there and calls ApplySettings itself.
-func (a *App) SettingsUI() error {
-	s, ok := runSettingsDialog(a.settingsDraft())
-	if !ok {
-		return nil
-	}
-	return a.ApplySettings(s)
+// SettingsUI opens the settings window. The window commits its own draft on OK,
+// so a confirmed dialog has already reached the engine and a dismissed one has
+// not - either way there is nothing to report back to the page, and a refusal is
+// read on the window that raised it. Like the node editor this is a no-op where
+// settingsDialogSupported is false: the frontend keeps the HTML card there and
+// calls ApplySettings itself.
+func (a *App) SettingsUI() {
+	runSettingsDialog(a.settingsDraft(), a.ApplySettings)
 }

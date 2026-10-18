@@ -3,9 +3,11 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -127,11 +129,22 @@ func TestSettingsDialogSelfTest(t *testing.T) {
 	in := Settings{HttpPort: "10809", SocksPort: "10808", ProxyMode: modeProxy,
 		RoutingMode: modeCNWhitelist, TunEnabled: true, HideTray: true}
 
+	// The window applies its own draft, so the self-test owns what "apply" means:
+	// fail makes it report a tunnel that could not come up, which has to be read
+	// on the window rather than in an alert or on the main window's bar.
+	var fail atomic.Bool
+	apply := func(Settings) error {
+		if fail.Load() {
+			return errors.New("TUN failed: the adapter needs elevation")
+		}
+		return nil
+	}
+
 	done := make(chan struct{})
 	var out Settings
 	var confirmed bool
 	go func() {
-		out, confirmed = runSettingsDialog(in)
+		out, confirmed = runSettingsDialog(in, apply)
 		close(done)
 	}()
 
@@ -151,6 +164,14 @@ func TestSettingsDialogSelfTest(t *testing.T) {
 	}
 	if len(kids) == 0 {
 		t.Fatal("BUG: the settings window has no child controls at all")
+	}
+	// The message line is part of the window but says nothing until OK is
+	// refused: an empty row the user stares at is its own UI bug.
+	msgC, ok := stFind(kids, sdIDMsg)
+	if !ok {
+		t.Error("BUG: the settings window has no inline message line to report with")
+	} else if msgC.visible || stText(msgC.hwnd) != "" {
+		t.Errorf("BUG: the message line opens visible and empty (vis=%v text=%q)", msgC.visible, stText(msgC.hwnd))
 	}
 	img := stShot(t, hwnd, "badproxy-settings-dialog")
 	checks := stCheckGrid(t, hwnd, kids, img, "OK")
@@ -250,24 +271,48 @@ func TestSettingsDialogSelfTest(t *testing.T) {
 		}
 	}
 
-	// A draft the engine cannot bind must be refused in place: an alert naming
-	// the reason, and the window still open with what the user typed.
+	// A draft the engine cannot bind must be refused in place: the reason on the
+	// window's own message line, no alert, and the edits still there to fix.
+	msgC, _ = stFind(stChildren(hwnd), sdIDMsg)
 	portC, _ := stFind(stChildren(hwnd), sdIDHTTP)
 	stSet(portC.hwnd, in.SocksPort)
 	stCmd(hwnd, ndIDOK, ndBNClick, 0)
-	msg := stMessageBox(t, 3*time.Second)
-	switch {
-	case msg == "":
-		t.Error("BUG: two identical ports were refused with no message the user can read")
-	case !strings.Contains(strings.ToLower(msg), "differ"):
-		t.Errorf("BUG: the alert says %q, which does not name the port clash", msg)
-	}
 	if !stAlive(hwnd) {
 		t.Fatal("BUG: a rejected draft closed the settings window and lost the edits")
 	}
-	t.Logf("rejected draft ok: alert=%q, window alive", msg)
+	if got := stText(msgC.hwnd); !strings.Contains(strings.ToLower(got), "differ") {
+		t.Errorf("BUG: two identical ports were refused with %q on the message line", got)
+	} else {
+		t.Logf("rejected draft ok: message=%q, window alive", got)
+	}
+	// An alert here would be both a second window to hunt and, historically, the
+	// thing that disabled the WebView2 host and killed the app.
+	if box := stMessageBox(t, 300*time.Millisecond); box != "" {
+		t.Errorf("BUG: a validation failure still raises an alert: %q", box)
+	}
+
+	// An apply that fails - the tunnel needing elevation is the real case - must
+	// also stay on this window, in red, with the draft intact.
+	fail.Store(true)
+	stSet(portC.hwnd, "18081")
+	stCmd(hwnd, ndIDOK, ndBNClick, 0)
+	if !stAlive(hwnd) {
+		t.Fatal("BUG: a failed apply closed the settings window; the reason went to the status bar")
+	}
+	if c, ok := stFind(stChildren(hwnd), sdIDMsg); !ok {
+		t.Error("BUG: the message line vanished from the window")
+	} else if got := stText(c.hwnd); !strings.Contains(got, "TUN failed") {
+		t.Errorf("BUG: the failed apply reported %q, not the tunnel error", got)
+	}
+	if got := stGet(portC.hwnd); got != "18081" {
+		t.Errorf("BUG: the failed apply threw the port away, it holds %q", got)
+	}
+	if confirmed {
+		t.Error("BUG: a failed apply reported a confirmed window")
+	}
 
 	// Fix the draft, tick LAN, pick another routing preset, then OK.
+	fail.Store(false)
 	stSet(portC.hwnd, "18080")
 	lanC, _ := stFind(stChildren(hwnd), sdIDLAN)
 	stTick(lanC.hwnd, true)
@@ -327,7 +372,10 @@ func TestSettingsDialogCancel(t *testing.T) {
 	var out Settings
 	var confirmed bool
 	go func() {
-		out, confirmed = runSettingsDialog(in)
+		out, confirmed = runSettingsDialog(in, func(Settings) error {
+			t.Error("BUG: a dismissed window still applied its draft")
+			return nil
+		})
 		close(done)
 	}()
 	hwnd := stTopWindow("BadProxyForm", 5*time.Second)

@@ -19,6 +19,7 @@ const (
 	sdIDLAN
 	sdIDLogin
 	sdIDTray
+	sdIDMsg
 )
 
 // The dropdowns show the same words the HTML card shows, and the selection is
@@ -36,12 +37,17 @@ type settingsForm struct {
 	f   *ndForm
 	in  Settings
 	out Settings
+	// apply commits the draft while this window is still open, so a failure to
+	// bring the tunnel up is read next to the box that caused it instead of on
+	// the main window's status bar after the dialog is gone.
+	apply func(Settings) error
 }
 
-// runSettingsDialog opens the native window and returns the draft and whether
-// the user confirmed.
-func runSettingsDialog(in Settings) (Settings, bool) {
-	sf := &settingsForm{in: in, out: in}
+// runSettingsDialog opens the native window and reports whether the user
+// confirmed. The draft it returns is already applied by then: OK means the
+// engine took it, and anything that refused is still on screen to be fixed.
+func runSettingsDialog(in Settings, apply func(Settings) error) (Settings, bool) {
+	sf := &settingsForm{in: in, out: in, apply: apply}
 	sf.f = &ndForm{
 		title:   "Bad Proxy · Settings",
 		first:   sdIDHTTP,
@@ -77,6 +83,7 @@ func (sf *settingsForm) build() {
 	f.addCheckRow("Start at login", sdIDLogin, sf.in.StartLogin)
 	f.addCheckRow("Hide tray icon (after restart)", sdIDTray, sf.in.HideTray)
 
+	f.addMsgRow(sdIDMsg)
 	f.addActionButtons("OK", "Cancel")
 	f.layout()
 	sf.syncTun()
@@ -106,8 +113,8 @@ func (sf *settingsForm) command(notify, id int) {
 	}
 }
 
-// confirm reads the widgets back into a draft. Returning false keeps the window
-// open so a validation message does not also throw the user's edits away.
+// confirm reads the widgets back into a draft, then commits it. Returning false
+// keeps the window open so a refusal does not also throw the user's edits away.
 func (sf *settingsForm) confirm() bool {
 	f := sf.f
 	s := Settings{
@@ -122,8 +129,17 @@ func (sf *settingsForm) confirm() bool {
 	if _, ok := f.inputs[sdIDTun]; ok {
 		s.TunEnabled = f.checked(sdIDTun)
 	}
+	// Both kinds of refusal belong on this window: a draft the engine could never
+	// bind, and a setting that reached the engine but failed there. The tunnel is
+	// the one that fails after the fact - it needs an adapter and an elevation the
+	// user may decline - and its error is meaningless once the dialog is gone.
 	if err := checkSettings(s); err != nil {
-		showMessageBox("Bad Proxy", err.Error(), false)
+		f.setMessage(err.Error(), true)
+		return false
+	}
+	f.setMessage("Applying...", false)
+	if err := sf.apply(s); err != nil {
+		f.setMessage(err.Error(), true)
 		return false
 	}
 	sf.out = s

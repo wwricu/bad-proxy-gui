@@ -24,9 +24,12 @@ func main() {
 		Title:  windowTitle,
 		Width:  820,
 		Height: 500,
-		// Keeps the two-panel layout and status bar intact at any size.
+		// Keeps the two-panel layout and status bar intact at any size. The
+		// height is the tallest card's: the node editor with every field visible,
+		// plus the message line a refused OK adds to the settings card. Below this
+		// the HTML cards start scrolling.
 		MinWidth:  640,
-		MinHeight: 420,
+		MinHeight: 460,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},

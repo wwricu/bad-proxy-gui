@@ -13,4 +13,8 @@ const (
 
 func runNodeDialog(in Node) (Node, bool) { return in, false }
 
-func runSettingsDialog(in Settings) (Settings, bool) { return in, false }
+// runSettingsDialog has no window here, and the draft is never applied because
+// the frontend keeps its HTML card and calls ApplySettings itself.
+func runSettingsDialog(in Settings, _ func(Settings) error) (Settings, bool) {
+	return in, false
+}
