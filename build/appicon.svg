@@ -5,9 +5,18 @@
 
          Full bleed on purpose. The Wails default shipped a small white tile
          with a drop shadow floating in a transparent canvas, which reads as a
-         postage stamp on the taskbar and in the Dock. -->
-    <rect width="1024" height="1024" rx="200" fill="#000000"/>
-    <text x="535" y="495" text-anchor="middle" dominant-baseline="central"
-          font-family="'Arial Black', 'Segoe UI Black', sans-serif" font-weight="900"
-          font-size="740" fill="#ffffff">B</text>
+         postage stamp on the taskbar and in the Dock.
+
+         The hairline is what keeps a white tile visible on a light background
+         (file explorer, launchpad); without it only the letter survives.
+
+         Glyph placement is measured off the rendered png rather than guessed:
+         text-anchor centres the advance width, and this letter has side
+         bearings. At these coordinates the ink is 527x629 with an even 249px
+         either side and 198px above and below. -->
+    <rect x="4" y="4" width="1016" height="1016" rx="198" fill="#ffffff"
+          stroke="#dfe2e6" stroke-width="8"/>
+    <text x="502" y="522" text-anchor="middle" dominant-baseline="central"
+          font-family="Arial, 'Segoe UI', sans-serif" font-weight="700"
+          font-size="880" fill="#111111">B</text>
 </svg>
