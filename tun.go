@@ -44,6 +44,19 @@ const (
 	tunMTU = 1400
 )
 
+// tunOffered is false until the privilege story is solved. TUN needs admin on
+// Windows and root on macOS, and a client that lives in the notification area
+// and in the startup folder is never either: the checkbox could only ever be
+// filled in by someone who first restarts the app from an elevated terminal,
+// which is a different program from the one they launched. Windows adds a second
+// wall - wintun.dll must sit beside the exe, so the single-exe download cannot
+// reach it at all. The proxy modes cover the same traffic for every app that
+// honours a proxy setting, which is the whole audience of a personal client.
+//
+// The stack stays in the tree behind this flag (tunnel/, tunplat/, and their
+// tests), because what it needs is a privileged helper, not a rewrite.
+const tunOffered = false
+
 // tunPolicy answers "should this name get a fake address?" once per query. It
 // reads the same rules.dat lists the engine reads, so the connection the tunnel
 // hands over is routed the way the DNS answer already promised.

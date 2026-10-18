@@ -368,7 +368,7 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 		}))()`, func(s string) bool { return strings.Contains(s, `"ports":"11909/11908"`) }, 10*time.Second)
 	c.check(strings.Contains(prefill, `"open":true`), "the gear opened the settings sheet in the same window")
 	c.check(strings.Contains(prefill, `"mode":"direct"`), "settings opens with the saved mode")
-	c.check(strings.Contains(prefill, `"tunRow":"flex"`), "the TUN row is offered where the platform supports it")
+	c.check(strings.Contains(prefill, `"tunRow":"none"`), "TUN is held out of the sheet: it cannot work un-elevated")
 	c.check(strings.Contains(prefill, `"loginRow":"flex"`), "the start-at-login row is offered on Windows")
 	c.check(strings.Contains(prefill, `"scroll":false`), "the settings form needs no scrollbar: %s", prefill)
 	c.shot(win, "settings")

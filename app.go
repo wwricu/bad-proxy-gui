@@ -210,7 +210,7 @@ func (a *App) GetPlatformInfo() map[string]bool {
 		"trayCanHide":          trayCanHide,
 		"systemProxySupported": systemProxySupported,
 		"nativeContextMenu":    nativeContextMenuSupported,
-		"tunSupported":         tunplat.Supported(),
+		"tunSupported":         tunOffered && tunplat.Supported(),
 	}
 }
 

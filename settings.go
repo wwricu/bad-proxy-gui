@@ -81,7 +81,7 @@ func (a *App) ApplySettings(s Settings) error {
 	next.normalize()
 	// Direct mode has no node for a tunnel to carry traffic through, so asking
 	// for TUN there means taking the adapter down, not putting it up.
-	wantTun := s.TunEnabled && next.ProxyMode != modeDirect
+	wantTun := tunOffered && s.TunEnabled && next.ProxyMode != modeDirect
 
 	// Registering with the OS first keeps the persisted flag truthful: a failure
 	// here leaves the running proxy exactly as it was.
