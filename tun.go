@@ -275,27 +275,3 @@ func (a *App) recoverTunToken() {
 	_ = os.Remove(path)
 	logger.Infof("tunnel: restored the system DNS settings left behind by a previous run")
 }
-
-// SetTun is the bottom-bar switch. Turning it on also leaves direct mode,
-// because a tunnel whose engine dials direct carries traffic for nothing.
-func (a *App) SetTun(enabled bool) error {
-	if enabled {
-		if a.st.ProxyMode == modeDirect {
-			a.st.ProxyMode = modeProxy
-			if err := a.store.save(a.st); err != nil {
-				return err
-			}
-			if err := a.restartEngine(); err != nil {
-				return err
-			}
-		}
-		if err := a.tun.up(a.st); err != nil {
-			return err
-		}
-		a.st.TunEnabled = true
-		return a.store.save(a.st)
-	}
-	a.tun.down()
-	a.st.TunEnabled = false
-	return a.store.save(a.st)
-}

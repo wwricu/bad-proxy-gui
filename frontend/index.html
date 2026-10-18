@@ -8,68 +8,37 @@
 </head>
 <body>
     <div id="app">
-        <!-- Left panel: node list -->
+        <!-- Node list: the whole window above the bar. Every setting lives in
+             the settings window the gear opens. -->
         <div class="left-panel">
             <div id="nodeList" class="node-list"></div>
             <div id="addNodeRow" class="add-node-row">+ Add node</div>
         </div>
-
-        <!-- Right panel: controls -->
-        <div class="right-panel">
-            <div class="panel-section">
-                <div class="section-title">Mode</div>
-                <select id="modeSelect">
-                    <option value="direct">Direct</option>
-                    <option value="proxy">Proxy</option>
-                    <option value="system">System Proxy</option>
-                </select>
-            </div>
-            <div class="panel-section">
-                <div class="section-title">Routing</div>
-                <select id="routingSelect">
-                    <option value="global">Global</option>
-                    <option value="cn-whitelist">Bypass CN</option>
-                    <option value="gfw-blacklist">Bypass GFW</option>
-                </select>
-            </div>
-            <div class="panel-section">
-                <div class="section-title">Settings</div>
-                <div class="control-group checkbox">
-                    <input type="checkbox" id="allowLAN">
-                    <label for="allowLAN">Allow LAN</label>
-                </div>
-                <div class="control-group checkbox" id="startLoginGroup" style="display:none;">
-                    <input type="checkbox" id="startLogin">
-                    <label for="startLogin">Start at login</label>
-                </div>
-                <div class="control-group checkbox" id="hideTrayGroup" style="display:none;">
-                    <input type="checkbox" id="hideTray">
-                    <label for="hideTray">Hide tray icon (restart required)</label>
-                </div>
-            </div>
-        </div>
     </div>
 
-    <!-- Bottom status bar with port inputs -->
+    <!-- Read-only status bar: what the engine is listening on, which mode and
+         routing preset it runs, and the door to the settings window. -->
     <div class="status-bar">
-        <div class="port-controls">
-            <div class="port-control">
-                <label>HTTP</label>
-                <input type="text" id="httpPort" class="port-input">
-            </div>
-            <div class="port-control">
-                <label>SOCKS</label>
-                <input type="text" id="socksPort" class="port-input">
-            </div>
+        <div class="readout">
+            <label>HTTP</label><span id="roHttp"></span>
+        </div>
+        <div class="readout">
+            <label>SOCKS</label><span id="roSocks"></span>
+        </div>
+        <div class="readout">
+            <label>MODE</label><span id="roMode"></span>
+        </div>
+        <div class="readout">
+            <label>ROUTING</label><span id="roRouting"></span>
         </div>
         <span id="statusText" class="status"></span>
-        <div id="tunGroup" class="tun-group" style="display:none;" title="TUN 模式：接管系统流量，按规则分流">
-            <span class="tun-label">TUN</span>
-            <label class="switch">
-                <input type="checkbox" id="tunSwitch">
-                <span class="slider"></span>
-            </label>
-        </div>
+        <button id="gearBtn" class="gear-btn" title="Settings">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+        </button>
     </div>
 
     <!-- Node context menu -->
@@ -107,6 +76,51 @@
             <div class="modal-actions">
                 <button id="modalCancel" class="btn-secondary">Cancel</button>
                 <button id="modalSave" class="btn-primary">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings card: the HTML twin of the native settings window. Nothing
+         here applies until OK. -->
+    <div id="settingsOverlay" class="modal-overlay" style="display:none;">
+        <div class="modal">
+            <div class="form-grid">
+                <label>HTTP port</label><input type="text" id="sHttpPort">
+                <label>SOCKS port</label><input type="text" id="sSocksPort">
+                <label>Mode</label>
+                <select id="sMode">
+                    <option value="direct">Direct</option>
+                    <option value="proxy">Proxy</option>
+                    <option value="system">System proxy</option>
+                </select>
+                <label>Routing</label>
+                <select id="sRouting">
+                    <option value="global">Global</option>
+                    <option value="cn-whitelist">Bypass CN</option>
+                    <option value="gfw-blacklist">Bypass GFW</option>
+                </select>
+            </div>
+            <div class="check-grid">
+                <div class="checkbox-row" id="sTunRow">
+                    <input type="checkbox" id="sTun">
+                    <label for="sTun">TUN mode (takes over system traffic)</label>
+                </div>
+                <div class="checkbox-row">
+                    <input type="checkbox" id="sLAN">
+                    <label for="sLAN">Allow LAN access</label>
+                </div>
+                <div class="checkbox-row" id="sLoginRow" style="display:none;">
+                    <input type="checkbox" id="sLogin">
+                    <label for="sLogin">Start at login</label>
+                </div>
+                <div class="checkbox-row" id="sTrayRow" style="display:none;">
+                    <input type="checkbox" id="sTray">
+                    <label for="sTray">Hide tray icon (after restart)</label>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button id="settingsCancel" class="btn-secondary">Cancel</button>
+                <button id="settingsOK" class="btn-primary">OK</button>
             </div>
         </div>
     </div>

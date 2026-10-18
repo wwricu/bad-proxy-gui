@@ -7,6 +7,11 @@ let nodeResults = {};   // idx -> last test text
 let ctxIdx = -1;        // node under the context menu
 let editIdx = -1;       // -1 = add, >=0 = edit
 
+// The status bar and the settings card name the same choices with the same
+// words as the native settings window, so a mode is one thing on screen.
+const MODE_LABELS = { direct: 'Direct', proxy: 'Proxy', system: 'System proxy' };
+const ROUTING_LABELS = { global: 'Global', 'cn-whitelist': 'Bypass CN', 'gfw-blacklist': 'Bypass GFW' };
+
 async function loadState() {
     state = await API().GetState();
     if (!platformInfo) {
@@ -48,33 +53,13 @@ function render() {
         nodeList.appendChild(item);
     });
 
-    // Ports with defaults
-    document.getElementById('socksPort').value = state.socks_port || '10808';
-    document.getElementById('httpPort').value = state.http_port || '10809';
-
-    document.getElementById('modeSelect').value = state.proxy_mode || 'direct';
-    document.getElementById('routingSelect').value = state.routing_mode || 'global';
-
-    document.getElementById('allowLAN').checked = state.allow_lan;
-    document.getElementById('startLogin').checked = state.start_login;
-    document.getElementById('hideTray').checked = state.hide_tray;
-    document.getElementById('tunSwitch').checked = !!state.tun_enabled;
-
-    if (platformInfo && platformInfo.tunSupported) {
-        document.getElementById('tunGroup').style.display = 'flex';
-    }
-
-    if (platformInfo && platformInfo.startLoginSupported) {
-        document.getElementById('startLoginGroup').style.display = 'flex';
-    }
-    if (platformInfo && platformInfo.trayCanHide) {
-        document.getElementById('hideTrayGroup').style.display = 'flex';
-    }
-    // System-proxy mode only exists where the OS proxy can actually be set.
-    if (platformInfo && !platformInfo.systemProxySupported) {
-        const opt = document.querySelector('#modeSelect option[value="system"]');
-        if (opt) opt.remove();
-    }
+    // Read-only: what the engine is actually listening on and running.
+    document.getElementById('roHttp').textContent = state.http_port || '10809';
+    document.getElementById('roSocks').textContent = state.socks_port || '10808';
+    const mode = state.proxy_mode || 'direct';
+    const routing = state.routing_mode || 'global';
+    document.getElementById('roMode').textContent = MODE_LABELS[mode] || mode;
+    document.getElementById('roRouting').textContent = ROUTING_LABELS[routing] || routing;
 }
 
 function escapeHtml(text) {
@@ -269,7 +254,98 @@ async function editNode(idx) {
     openForm(idx);
 }
 
-// ---- node / mode / checkboxes ----
+// ---- settings window ----
+
+// openSettings picks the backend the same way the node editor does: a real OS
+// window where Wails can hand one over (Windows), the in-page card elsewhere.
+async function openSettings() {
+    if (platformInfo && platformInfo.settingsDialog) {
+        try {
+            await API().SettingsUI();
+        } catch (err) {
+            // Everything up to the failing step did apply, and the state file
+            // already holds the draft, so the bar has to be re-read either way.
+            setStatus(err.message);
+        }
+        await loadState();
+        return;
+    }
+    document.getElementById('sHttpPort').value = state.http_port || '10809';
+    document.getElementById('sSocksPort').value = state.socks_port || '10808';
+    document.getElementById('sMode').value = state.proxy_mode || 'direct';
+    document.getElementById('sRouting').value = state.routing_mode || 'global';
+    document.getElementById('sTun').checked = !!state.tun_enabled;
+    document.getElementById('sLAN').checked = !!state.allow_lan;
+    document.getElementById('sLogin').checked = !!state.start_login;
+    document.getElementById('sTray').checked = !!state.hide_tray;
+
+    document.getElementById('sTunRow').style.display =
+        platformInfo && platformInfo.tunSupported ? 'flex' : 'none';
+    document.getElementById('sLoginRow').style.display =
+        platformInfo && platformInfo.startLoginSupported ? 'flex' : 'none';
+    document.getElementById('sTrayRow').style.display =
+        platformInfo && platformInfo.trayCanHide ? 'flex' : 'none';
+    // System-proxy mode only exists where the OS proxy can actually be set.
+    const sysOpt = document.querySelector('#sMode option[value="system"]');
+    if (sysOpt && platformInfo && !platformInfo.systemProxySupported) sysOpt.remove();
+
+    syncTunRow();
+    document.getElementById('settingsOverlay').style.display = 'flex';
+    document.getElementById('sHttpPort').focus();
+}
+
+// syncTunRow keeps the tunnel honest about the mode: direct has no node for it
+// to carry traffic through, so the box comes unticked and unusable until a
+// proxy mode is picked. The native window does exactly the same.
+function syncTunRow() {
+    const row = document.getElementById('sTunRow');
+    const tun = document.getElementById('sTun');
+    const off = document.getElementById('sMode').value === 'direct';
+    tun.disabled = off;
+    if (off) tun.checked = false;
+    row.classList.toggle('muted', off);
+}
+
+document.getElementById('sMode').onchange = syncTunRow;
+
+document.getElementById('gearBtn').onclick = openSettings;
+
+document.getElementById('settingsCancel').onclick = () => {
+    document.getElementById('settingsOverlay').style.display = 'none';
+    setStatus('');
+};
+
+document.getElementById('settingsOK').onclick = async () => {
+    const draft = {
+        http_port: document.getElementById('sHttpPort').value.trim(),
+        socks_port: document.getElementById('sSocksPort').value.trim(),
+        proxy_mode: document.getElementById('sMode').value,
+        routing_mode: document.getElementById('sRouting').value,
+        tun_enabled: document.getElementById('sTun').checked,
+        allow_lan: document.getElementById('sLAN').checked,
+        start_login: document.getElementById('sLogin').checked,
+        hide_tray: document.getElementById('sTray').checked,
+    };
+    // Bringing the tunnel up or down touches the virtual adapter and the system
+    // resolver, and can wait on an elevation prompt, so the button is locked
+    // while OK is in flight.
+    const btn = document.getElementById('settingsOK');
+    btn.disabled = true;
+    setStatus('Applying...');
+    try {
+        await API().ApplySettings(draft);
+        document.getElementById('settingsOverlay').style.display = 'none';
+        setStatus('');
+    } catch (err) {
+        // The card stays open with what the user typed: an error here means
+        // nothing of it took effect except what ApplySettings got to.
+        setStatus(err.message);
+    }
+    btn.disabled = false;
+    await loadState();
+};
+
+// ---- nodes ----
 
 async function selectNode(idx) {
     try {
@@ -279,81 +355,6 @@ async function selectNode(idx) {
         setStatus('Switch failed: ' + err.message);
     }
 }
-
-document.getElementById('modeSelect').onchange = async (e) => {
-    const mode = e.target.value;
-    try {
-        await API().SetProxyMode(mode);
-    } catch (err) {
-        setStatus('Switch failed: ' + err.message);
-    }
-    // Reload so the dropdown reflects the stored mode (a failed system-proxy
-    // switch stays on the previous mode) and the engine reflects the change.
-    await loadState();
-};
-
-document.getElementById('routingSelect').onchange = async (e) => {
-    try {
-        await API().SetRoutingMode(e.target.value);
-    } catch (err) {
-        setStatus('Routing switch failed: ' + err.message);
-    }
-    await loadState();
-};
-
-document.getElementById('allowLAN').onchange = async (e) => {
-    await API().SetAllowLAN(e.target.checked);
-    await loadState();
-};
-
-document.getElementById('startLogin').onchange = async (e) => {
-    try {
-        await API().SetStartAtLogin(e.target.checked);
-    } catch (err) {
-        setStatus('Start at login failed: ' + err.message);
-    }
-    await loadState();
-};
-
-document.getElementById('hideTray').onchange = async (e) => {
-    await API().SetHideTray(e.target.checked);
-    await loadState();
-};
-
-// Bringing the tunnel up or down touches the virtual adapter and the system
-// resolver, and can wait on an elevation prompt - long enough that a second
-// click during the first one would be a real hazard, not just a nuisance.
-document.getElementById('tunSwitch').onchange = async (e) => {
-    const sw = e.target;
-    const on = sw.checked;
-    sw.disabled = true;
-    setStatus(on ? 'Enabling TUN...' : 'Disabling TUN...');
-    try {
-        await API().SetTun(on);
-        setStatus('');
-    } catch (err) {
-        // The reason stays in the log; on the bar it only needs to be seen once.
-        setStatus('TUN failed: ' + err.message, 8000);
-    }
-    sw.disabled = false;
-    await loadState();
-};
-
-// ---- port inputs ----
-
-function setupPortInput(inputId, setter) {
-    const input = document.getElementById(inputId);
-    input.onblur = async () => {
-        await setter(input.value);
-        await loadState();
-    };
-    input.onkeydown = (e) => {
-        if (e.key === 'Enter') input.blur();
-    };
-}
-
-setupPortInput('socksPort', (v) => API().SetSocksPort(v));
-setupPortInput('httpPort', (v) => API().SetHttpPort(v));
 
 // Initialize
 loadState().catch((err) => setStatus('Load failed: ' + err.message));

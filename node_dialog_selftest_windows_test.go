@@ -401,11 +401,14 @@ func stCheckInk(t *testing.T, img *image.RGBA, hwnd uintptr, c stChild, inset, c
 	return "other"
 }
 
-// stCheckGrid proves the native editor uses the same box model as
+// stCheckGrid proves a native dialog uses the same box model as
 // frontend/src/style.css (.modal padding 16, .form-grid 110px label column +
-// 10px gap, 26px fields, 8px row gap) scaled to this window's DPI. Without it
-// the dialog drifts back to generic Win32 spacing whenever someone edits layout.
-func stCheckGrid(t *testing.T, hwnd uintptr, kids []stChild, img *image.RGBA) {
+// 10px gap, 26px fields, 8px row gap) scaled to this window's DPI, and returns
+// the check boxes it found so a form that has them can measure those too.
+// wantPrimary names that form's own action caption ("Save", "OK"). Without
+// this the dialogs drift back to generic Win32 spacing whenever someone edits
+// layout.
+func stCheckGrid(t *testing.T, hwnd uintptr, kids []stChild, img *image.RGBA, wantPrimary string) []stChild {
 	const tol = 2 // rounding only; a real mismatch is always several px
 	dpi := int(ndDpi(hwnd))
 	px := func(v int) int { return v * dpi / ndDefaultDpi }
@@ -425,10 +428,11 @@ func stCheckGrid(t *testing.T, hwnd uintptr, kids []stChild, img *image.RGBA) {
 		stSSCenterImg = 0x0200 // SS_CENTERIMAGE, which every .form-grid label carries
 		stSSRight     = 0x0002 // SS_RIGHT, the alignment .form-grid no longer asks for
 		stTypeMask    = 0x000F // BS_TYPEMASK: the button flavour lives in the low nibble
+		stBSAutoCheck = 0x0003 // BS_AUTOCHECKBOX, the flavour of ndBSCheck
 		stTabstop     = 0x00010000
 	)
 
-	var fields, labels, btns []stChild
+	var fields, labels, btns, checks []stChild
 	for _, c := range kids {
 		if !c.visible {
 			continue
@@ -453,10 +457,14 @@ func stCheckGrid(t *testing.T, hwnd uintptr, kids []stChild, img *image.RGBA) {
 				labels = append(labels, c)
 			}
 		case "Button":
-			if c.style&stTypeMask != ndBSOwner {
-				t.Errorf("BUG: button %q is not BS_OWNERDRAW (style 0x%x), so the OS theme paints it", stText(c.hwnd), c.style)
+			switch c.style & stTypeMask {
+			case ndBSOwner:
+				btns = append(btns, c)
+			case stBSAutoCheck:
+				checks = append(checks, c)
+			default:
+				t.Errorf("BUG: button %q is neither BS_OWNERDRAW nor BS_AUTOCHECKBOX (style 0x%x)", stText(c.hwnd), c.style)
 			}
-			btns = append(btns, c)
 		}
 	}
 	if len(fields) == 0 {
@@ -556,12 +564,9 @@ func stCheckGrid(t *testing.T, hwnd uintptr, kids []stChild, img *image.RGBA) {
 	if len(labels) != len(fields) {
 		t.Errorf("UI BUG: %d grid labels for %d fields; every field needs its label cell", len(labels), len(fields))
 	}
-	if got := stText(hwnd); got != "Bad Proxy · "+wantTitle {
-		t.Errorf("UI BUG: window caption is %q, want %q", got, "Bad Proxy · "+wantTitle)
-	}
 
 	// The card itself: 380 CSS px wide, 16px padding on the right edge, and the
-	// primary Save button flush right with Cancel to its left.
+	// primary action button flush right with Cancel to its left.
 	check("client width", int(rc.right), px(wantClientW))
 	if len(btns) != 2 {
 		t.Fatalf("UI BUG: expected 2 push buttons, found %d", len(btns))
@@ -573,22 +578,24 @@ func stCheckGrid(t *testing.T, hwnd uintptr, kids []stChild, img *image.RGBA) {
 		}
 	}
 	save, cancel := btns[0], btns[1]
-	if stText(save.hwnd) != wantSaveText || stText(cancel.hwnd) != wantCancel {
+	if stText(save.hwnd) != wantPrimary {
 		save, cancel = btns[1], btns[0]
 	}
-	if stText(save.hwnd) != wantSaveText {
-		t.Errorf("UI BUG: buttons are %q and %q, want Save and Cancel", stText(btns[0].hwnd), stText(btns[1].hwnd))
+	if stText(save.hwnd) != wantPrimary || stText(cancel.hwnd) != wantCancel {
+		t.Errorf("UI BUG: buttons are %q and %q, want %q and %q",
+			stText(btns[0].hwnd), stText(btns[1].hwnd), wantPrimary, wantCancel)
 	}
-	check("Save right edge", int(save.r)-ox, px(wantClientW)-px(wantCardPad))
-	check("Cancel right edge", int(cancel.r)-ox, int(save.l)-ox-px(wantBtnGap))
+	check("primary right edge", int(save.r)-ox, px(wantClientW)-px(wantCardPad))
+	check("secondary right edge", int(cancel.r)-ox, int(save.l)-ox-px(wantBtnGap))
 	if int(cancel.r)-ox >= int(save.l)-ox {
-		t.Error("UI BUG: Cancel overlaps or sits right of Save; index.html orders them Cancel then Save")
+		t.Errorf("UI BUG: %q overlaps or sits right of %q; index.html orders them Cancel then the action", wantCancel, wantPrimary)
 	}
 	if w := int(save.r - save.l); w <= px(wantBtnH) {
-		t.Errorf("UI BUG: Save is %dpx wide - an owner-drawn button sized from its caption must fit %q plus 16px padding", w, wantSaveText)
+		t.Errorf("UI BUG: %q is %dpx wide - an owner-drawn button sized from its caption must fit %q plus 16px padding", wantPrimary, w, wantPrimary)
 	}
-	t.Logf("grid ok: dpi=%d fields=%d labels=%d save=%dx%d at x=%d..%d",
-		dpi, len(fields), len(labels), save.r-save.l, save.b-save.t, int(save.l)-ox, int(save.r)-ox)
+	t.Logf("grid ok: dpi=%d fields=%d labels=%d %s=%dx%d at x=%d..%d",
+		dpi, len(fields), len(labels), wantPrimary, save.r-save.l, save.b-save.t, int(save.l)-ox, int(save.r)-ox)
+	return checks
 }
 
 func TestNodeDialogSelfTest(t *testing.T) {
@@ -607,7 +614,7 @@ func TestNodeDialogSelfTest(t *testing.T) {
 		close(done)
 	}()
 
-	hwnd := stTopWindow("BadProxyNodeForm", 5*time.Second)
+	hwnd := stTopWindow("BadProxyForm", 5*time.Second)
 	if hwnd == 0 {
 		t.Fatal("editor window never appeared")
 	}
@@ -643,7 +650,10 @@ func TestNodeDialogSelfTest(t *testing.T) {
 		}
 	}
 	img := stShot(t, hwnd, "badproxy-node-dialog")
-	stCheckGrid(t, hwnd, kids, img)
+	if got := stText(hwnd); got != "Bad Proxy · "+wantTitle {
+		t.Errorf("UI BUG: window caption is %q, want %q", got, "Bad Proxy · "+wantTitle)
+	}
+	stCheckGrid(t, hwnd, kids, img, wantSaveText)
 
 	// PrintWindow renders some common controls differently from the screen (it
 	// drops the EDIT frame), so a real desktop grab is the only way to see what a
@@ -783,7 +793,7 @@ func TestNodeDialogSelfTest(t *testing.T) {
 		_, ok2 = runNodeDialog(Node{Name: "second", Protocol: "trojan", Server: "a.b", Port: "1", Transport: "tls"})
 		close(done2)
 	}()
-	h2 := stTopWindow("BadProxyNodeForm", 5*time.Second)
+	h2 := stTopWindow("BadProxyForm", 5*time.Second)
 	if h2 == 0 {
 		t.Fatal("BUG: editor does not open a second time")
 	}
@@ -893,7 +903,7 @@ func TestNodeDialogOwnerLeftAlign(t *testing.T) {
 			Secret: "u", Transport: "xhttp", Path: "/bp"})
 		close(done)
 	}()
-	hwnd := stTopWindow("BadProxyNodeForm", 5*time.Second)
+	hwnd := stTopWindow("BadProxyForm", 5*time.Second)
 	if hwnd == 0 {
 		t.Fatal("editor window never appeared")
 	}

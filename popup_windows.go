@@ -282,7 +282,7 @@ func showMessageBox(title, message string, confirm bool) bool {
 	if confirm {
 		style = mbYesNo | mbIconQuestion | mbDefButton2
 	}
-	r, _, _ := procMessageBoxW.Call(mainWindowHwnd(),
+	r, _, _ := procMessageBoxW.Call(ndMessageOwner(),
 		uintptr(unsafe.Pointer(m)), uintptr(unsafe.Pointer(t)), style)
 	if confirm {
 		return r == idYes

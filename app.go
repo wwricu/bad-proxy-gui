@@ -73,72 +73,6 @@ func (a *App) GetState() GUIState {
 	return a.st
 }
 
-// SetSocksPort updates the SOCKS port and persists.
-func (a *App) SetSocksPort(port string) error {
-	a.st.SocksPort = port
-	a.st.normalize()
-	if err := a.store.save(a.st); err != nil {
-		return err
-	}
-	return a.restartEngine()
-}
-
-// SetHttpPort updates the HTTP port and persists.
-func (a *App) SetHttpPort(port string) error {
-	a.st.HttpPort = port
-	a.st.normalize()
-	if err := a.store.save(a.st); err != nil {
-		return err
-	}
-	if err := a.restartEngine(); err != nil {
-		return err
-	}
-	// In system mode the OS proxy follows the http inbound, so re-point it.
-	if a.st.ProxyMode == modeSystem {
-		return setSystemProxy(a.st.HttpPort)
-	}
-	return nil
-}
-
-// SetProxyMode changes the proxy mode (direct/proxy/system). The OS proxy is
-// touched only on the edges this app owns: entering system mode points it at
-// the local http inbound, leaving system mode clears it again. A direct<->proxy
-// switch never configured the OS proxy, so it leaves whatever the user has alone.
-func (a *App) SetProxyMode(mode string) error {
-	prev := a.st.ProxyMode
-	a.st.ProxyMode = mode
-	a.st.normalize()
-	// A tunnel over a direct engine would carry traffic nowhere, and direct mode
-	// has no node to carry it with, so the switch comes off with the mode.
-	if mode == modeDirect && a.tun.running() {
-		a.tun.down()
-	}
-	if err := a.store.save(a.st); err != nil {
-		return err
-	}
-	if err := a.restartEngine(); err != nil {
-		return err
-	}
-	switch {
-	case a.st.ProxyMode == modeSystem:
-		return setSystemProxy(a.st.HttpPort)
-	case prev == modeSystem:
-		return clearSystemProxy()
-	}
-	return nil
-}
-
-// SetRoutingMode changes the routing preset (global/cn-whitelist/
-// gfw-blacklist) and restarts the engine so the new split takes effect.
-func (a *App) SetRoutingMode(mode string) error {
-	a.st.RoutingMode = mode
-	a.st.normalize()
-	if err := a.store.save(a.st); err != nil {
-		return err
-	}
-	return a.restartEngine()
-}
-
 // AddNode adds a new node to the list.
 func (a *App) AddNode(n Node) error {
 	a.st.Nodes = append(a.st.Nodes, n)
@@ -292,30 +226,6 @@ func (a *App) shutdown() {
 	}
 }
 
-// SetStartAtLogin enables or disables starting at login.
-func (a *App) SetStartAtLogin(enabled bool) error {
-	if err := setStartAtLogin(enabled); err != nil {
-		return err
-	}
-	a.st.StartLogin = enabled
-	return a.store.save(a.st)
-}
-
-// SetHideTray controls whether the tray icon is hidden.
-func (a *App) SetHideTray(hidden bool) error {
-	a.st.HideTray = hidden
-	return a.store.save(a.st)
-}
-
-// SetAllowLAN enables or disables LAN access for the inbounds.
-func (a *App) SetAllowLAN(allowed bool) error {
-	a.st.AllowLAN = allowed
-	if err := a.store.save(a.st); err != nil {
-		return err
-	}
-	return a.restartEngine()
-}
-
 // GetPlatformInfo returns platform-specific capabilities.
 func (a *App) GetPlatformInfo() map[string]bool {
 	return map[string]bool{
@@ -324,6 +234,7 @@ func (a *App) GetPlatformInfo() map[string]bool {
 		"systemProxySupported": systemProxySupported,
 		"nativeContextMenu":    nativeContextMenuSupported,
 		"nodeDialog":           nodeDialogSupported,
+		"settingsDialog":       settingsDialogSupported,
 		"tunSupported":         tunplat.Supported(),
 	}
 }
