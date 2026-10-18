@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
@@ -28,13 +29,15 @@ const (
 	nodeWindowHeight     = 452
 )
 
-// openFormWindow shows one form window, or raises the one already open. A
-// second click on the gear must not stack another copy writing the same state,
-// and two editors open at once would each be about to overwrite the other.
+// openFormWindow shows one form window, or refuses to. There is never a second
+// one: the editor and the settings window both hold the whole GUIState, so two
+// of them open at once would each be about to write back a stale copy. A repeat
+// request raises the window that already has the floor and has it blink, which
+// is how Windows answers a duplicate request against a window that already has
+// the user's answer outstanding.
 func (a *App) openFormWindow(name, title, url string, height int) {
-	if existing := a.formByName(name); existing != nil {
-		existing.Show()
-		existing.Focus()
+	if existing := a.anyFormWindow(); existing != nil {
+		a.nudgeFormWindow(existing)
 		return
 	}
 	win := a.wails.Window.NewWithOptions(application.WebviewWindowOptions{
@@ -51,6 +54,20 @@ func (a *App) openFormWindow(name, title, url string, height int) {
 	win.RegisterHook(events.Common.WindowClosing, func(*application.WindowEvent) {
 		a.mainWindow.EmitEvent("state-changed")
 	})
+}
+
+// nudgeFormWindow is the answer to a form request that cannot be honoured:
+// raise the window that already holds a form and make it blink for itself.
+//
+// The blink is the operating system's own, not an animation of ours. This is
+// the effect every Win32 modal dialog gives when you click outside it - the
+// dialog manager calls FlashWindowEx (caption plus taskbar button) rather than
+// moving the window, and so do we. macOS gets the same intent through
+// requestUserAttention, which bounces the Dock icon.
+func (a *App) nudgeFormWindow(win application.Window) {
+	win.Show()
+	win.Focus()
+	flashForAttention(win)
 }
 
 func (a *App) openSettingsWindow() {
@@ -84,4 +101,16 @@ func (a *App) formByName(name string) application.Window {
 		return nil
 	}
 	return win
+}
+
+// anyFormWindow returns the form window that is open, if there is one. The main
+// window is named "main" and never matches, so this is only ever the editor or
+// the settings window.
+func (a *App) anyFormWindow() application.Window {
+	for _, win := range a.wails.Window.GetAll() {
+		if n := win.Name(); n == settingsWindowName || strings.HasPrefix(n, nodeWindowPrefix) {
+			return win
+		}
+	}
+	return nil
 }

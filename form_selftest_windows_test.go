@@ -452,10 +452,44 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 	time.Sleep(1200 * time.Millisecond)
 	c.check(countForms(a, settingsWindowName) == 1,
 		"the gear pressed twice leaves one settings window: %d", countForms(a, settingsWindowName))
+
+	// A *different* form is refused too. One window holds the state at a time,
+	// so the plus must not smuggle a second writer in beside the settings one.
+	form := a.anyFormWindow()
+	if form == nil {
+		c.fail("no form window is open to refuse a request")
+	} else {
+		beforeX, beforeY := form.Position()
+		probe(win, probes, `(() => { document.getElementById("addNodeBtn").click(); return "sent"; })()`)
+		// Catch the blink while it is running: the shot is for the human, since
+		// FlashWindowEx is drawn by the window manager and has no state to read.
+		time.Sleep(120 * time.Millisecond)
+		c.shot(form, "form-blink")
+		c.check(countForms(a, nodeWindowPrefix) == 0,
+			"the plus does not open an editor while the settings window is open: %d", countForms(a, nodeWindowPrefix))
+		c.check(countForms(a, settingsWindowName) == 1,
+			"the refused request leaves the settings window alone: %d", countForms(a, settingsWindowName))
+		c.check(formName(a.anyFormWindow()) == settingsWindowName,
+			"the one form still open is the settings window: %q", formName(a.anyFormWindow()))
+
+		// The answer is a blink, not a shove: a window that ends up anywhere
+		// other than where it was means something is animating it by hand.
+		time.Sleep(600 * time.Millisecond)
+		afterX, afterY := form.Position()
+		c.check(afterX == beforeX && afterY == beforeY,
+			"the refusal does not move the window: %d,%d -> %d,%d", beforeX, beforeY, afterX, afterY)
+
+		// With the settings window closed, the plus gets its editor again.
+		form.Close()
+		if !waitClosed(a, settingsWindowName, 5*time.Second) {
+			c.fail("the settings window never closed")
+		}
+	}
 	probe(win, probes, `(() => { document.getElementById("addNodeBtn").click(); return "sent"; })()`)
 	if waitForm(a, nodeWindowPrefix+"new", 5*time.Second) == nil {
-		c.fail("the plus never reopened the editor while another form was open")
+		c.fail("the plus never opened the editor once no form was open")
 	}
+	probe(win, probes, `(() => { document.getElementById("addNodeBtn").click(); return "sent"; })()`)
 	time.Sleep(600 * time.Millisecond)
 	c.check(countForms(a, nodeWindowPrefix) == 1,
 		"the plus pressed twice leaves one editor: %d", countForms(a, nodeWindowPrefix))
@@ -463,12 +497,9 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 	time.Sleep(600 * time.Millisecond)
 	c.check(countForms(a, nodeWindowPrefix) == 1,
 		"and it is still one after a third click: %d", countForms(a, nodeWindowPrefix))
-	// Close both again so the list is the only thing left, which is what the
-	// remaining steps assume.
+	// Close what is left so the list is the only window again, which is what
+	// the remaining steps assume.
 	if w := a.formByName(nodeWindowPrefix + "new"); w != nil {
-		w.Close()
-	}
-	if w := a.formByName(settingsWindowName); w != nil {
 		w.Close()
 	}
 	time.Sleep(800 * time.Millisecond)
@@ -667,6 +698,14 @@ func waitClosed(a *App, name string, limit time.Duration) bool {
 		time.Sleep(100 * time.Millisecond)
 	}
 	return false
+}
+
+// formName keeps a closed window out of a failure message.
+func formName(w application.Window) string {
+	if w == nil {
+		return "(none)"
+	}
+	return w.Name()
 }
 
 // countForms is how many open windows carry a name from one form's namespace.
