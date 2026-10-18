@@ -12,3 +12,7 @@ const trayCanHide = false
 // trayTitle is empty on macOS: AppKit renders a status item's title as text
 // next to the icon, and the menu-bar item is signed off as icon-only.
 const trayTitle = ""
+
+// trayHasMenu is false on macOS: the menu-bar item is signed off as icon-only
+// with no right-click menu. Quit lives in the app menu (Cmd+Q).
+const trayHasMenu = false

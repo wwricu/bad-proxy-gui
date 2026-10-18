@@ -1,60 +1,92 @@
 package main
 
 import (
-	"context"
 	"embed"
+	"io/fs"
 
-	"github.com/wailsapp/wails/v2"
-	"github.com/wailsapp/wails/v2/pkg/options"
-	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
-	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/events"
 )
 
 //go:embed all:frontend
-var assets embed.FS
+var bundled embed.FS
 
-// windowTitle is the native window title; macOS reopen matches the main
-// window by it, so it must stay in sync with options.Title.
+// windowTitle is the native window title; the macOS activation helpers match
+// the main window by it, so it must stay in sync with the window's Title.
 const windowTitle = "Bad Proxy GUI"
 
-func main() {
-	app := &App{}
+// mainWindowName identifies the one window that always exists. Editors and
+// settings are separate windows and never take this name.
+const mainWindowName = "main"
 
-	err := wails.Run(&options.App{
-		Title:  windowTitle,
-		Width:  820,
-		Height: 500,
-		// Keeps the two-panel layout and status bar intact at any size. The
-		// height is the tallest card's: the node editor with every field visible,
-		// plus the message line a refused OK adds to the settings card. Below this
-		// the HTML cards start scrolling.
-		MinWidth:  640,
-		MinHeight: 460,
-		AssetServer: &assetserver.Options{
-			Assets: assets,
+func main() {
+	// The tray is declared before the run loop starts, and whether it exists
+	// depends on the saved state, so the store is read here rather than inside
+	// the service's startup.
+	app := newApp()
+
+	frontend, err := fs.Sub(bundled, "frontend")
+	if err != nil {
+		println("Error:", err.Error())
+		return
+	}
+
+	wails := application.New(application.Options{
+		Name:        windowTitle,
+		Description: "Bad Proxy client",
+		Mac: application.MacOptions{
+			// Closing the window hides it to the menu bar, so the last window
+			// closing is not a request to leave.
+			ApplicationShouldTerminateAfterLastWindowClosed: false,
 		},
-		SingleInstanceLock: &options.SingleInstanceLock{
-			UniqueId: "com.wwricu.bad-proxy-gui",
-			OnSecondInstanceLaunch: func(_ options.SecondInstanceData) {
+		SingleInstance: &application.SingleInstanceOptions{
+			UniqueID: "com.wwricu.bad-proxy-gui",
+			OnSecondInstanceLaunch: func(application.SecondInstanceData) {
 				app.showWindow()
 			},
 		},
-		OnStartup: app.startup,
-		OnBeforeClose: func(ctx context.Context) (prevent bool) {
-			if app.trayOn && !app.quitting {
-				becomeBackground()
-				wailsRuntime.WindowHide(ctx)
-				return true
-			}
-			app.shutdown()
-			return false
+		Assets: application.AssetOptions{
+			Handler: application.BundledAssetFileServer(frontend),
 		},
-		Bind: []interface{}{
-			app,
-		},
+		Services:   []application.Service{application.NewService(app)},
+		OnShutdown: app.shutdown,
 	})
 
-	if err != nil {
+	win := wails.Window.NewWithOptions(application.WebviewWindowOptions{
+		Name:     mainWindowName,
+		Title:    windowTitle,
+		Width:    820,
+		Height:   500,
+		MinWidth: 640,
+		// The floor is the main page's own content, not the editors' any more:
+		// those are windows of their own now, so shrinking the list can no
+		// longer push a form into a scrollbar.
+		MinHeight: 420,
+		URL:       "/",
+	})
+
+	app.wails = wails
+	app.mainWindow = win
+	setupTray(app, wails)
+
+	// A close is a hide while the tray is there to bring the window back. The
+	// hook runs before Wails destroys anything, so Cancel() has to be the one
+	// that says no.
+	win.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
+		if app.trayOn && !app.quitting {
+			e.Cancel()
+			becomeBackground()
+			win.Hide()
+		}
+	})
+
+	// Reopening on macOS: the Dock tile and the menu bar item both have to bring
+	// back the window that was merely hidden.
+	wails.Event.OnApplicationEvent(events.Mac.ApplicationShouldHandleReopen, func(*application.ApplicationEvent) {
+		app.showWindow()
+	})
+
+	if err := wails.Run(); err != nil {
 		println("Error:", err.Error())
 	}
 }

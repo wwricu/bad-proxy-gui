@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Node</title>
+    <link rel="stylesheet" href="src/style.css">
+</head>
+<body class="form-page">
+    <div class="modal">
+        <div class="form-grid">
+            <label>Name</label><input type="text" id="fName">
+            <label>Protocol</label>
+            <select id="fProtocol">
+                <option value="vless">vless</option>
+                <option value="btp">btp</option>
+                <option value="trojan">trojan</option>
+                <option value="socks">socks</option>
+            </select>
+            <label>Address</label><input type="text" id="fServer">
+            <label>Port</label><input type="text" id="fPort">
+            <label id="lSecret">Secret</label><input type="text" id="fSecret">
+            <label>Transport</label>
+            <select id="fTransport">
+                <option value="tls">tls</option>
+                <option value="xhttp">xhttp</option>
+            </select>
+            <label id="lAuthority">Domain (SNI/Host)</label><input type="text" id="fAuthority">
+            <label id="lPath">Path</label><input type="text" id="fPath">
+            <label id="lPadding">Padding range</label><input type="text" id="fPadding">
+        </div>
+        <div id="fMsg" class="form-msg" aria-live="polite"></div>
+        <div class="modal-actions">
+            <button id="modalCancel" class="btn-secondary">Cancel</button>
+            <button id="modalSave" class="btn-primary">Save</button>
+        </div>
+    </div>
+
+    <script type="module" src="/wails/runtime.js"></script>
+    <script type="module" src="src/node.js"></script>
+</body>
+</html>

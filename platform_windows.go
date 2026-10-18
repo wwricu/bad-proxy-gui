@@ -13,3 +13,6 @@ const trayCanHide = true
 
 // trayTitle is the label the notification-area icon carries.
 const trayTitle = "Bad Proxy"
+
+// trayHasMenu is true on Windows: the right click pops a menu carrying Quit.
+const trayHasMenu = true

@@ -6,43 +6,42 @@ import (
 	"math/rand"
 	"strings"
 
-	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wwricu/bad-proxy-gui/tunplat"
 )
 
 // App exposes backend methods to the frontend via Wails runtime binding.
 type App struct {
-	ctx      context.Context
-	eng      engine
-	st       GUIState
-	store    *store
-	trayOn   bool
-	quitting bool
-	tun      tunRunner
+	wails      *application.App
+	mainWindow application.Window
+	tray       *application.SystemTray
+	eng        engine
+	st         GUIState
+	store      *store
+	trayOn     bool
+	quitting   bool
+	tun        tunRunner
 }
 
-// startup is called when the app starts.
-func (a *App) startup(ctx context.Context) {
-	a.ctx = ctx
+// newApp loads the saved state. It runs before the window exists: the state
+// decides whether there is a tray to hide into.
+func newApp() *App {
+	a := &App{}
 	a.store = newStoreFromConfigDir()
 	a.st = a.store.load()
-	// On platforms where the tray cannot be hidden (macOS: it is the only
-	// reopen affordance), trayCanHide is false and the tray always runs.
-	if hasTray && !(trayCanHide && a.st.HideTray) {
-		a.trayOn = true
-		go startTray(a.showWindow, a.quit)
-	}
-	// Closing the window only hides it, so the app must recover on its own when
-	// macOS re-activates it (Finder double-click). Watched natively; no-op off
-	// macOS.
-	watchReopen(windowTitle)
+	return a
+}
+
+// ServiceStartup is Wails' hook for a bound service. It runs once the run loop
+// is up, which is the first moment a window or a tray may be touched.
+func (a *App) ServiceStartup(context.Context, application.ServiceOptions) error {
 	// A run that was killed rather than closed left the system resolver pointed
 	// at this app's DNS port. Fix that before anything else touches the network.
 	a.recoverTunToken()
 	// The engine runs from launch: direct mode is always buildable, so the
 	// local inbounds answer immediately and mode switches are cheap restarts.
 	if err := a.eng.start(a.st); err != nil {
-		return
+		return nil
 	}
 	// Relaunching in system mode re-points the OS proxy at the (now-running)
 	// inbound. Non-system launches must not touch it: a direct/proxy start
@@ -50,22 +49,24 @@ func (a *App) startup(ctx context.Context) {
 	if a.st.ProxyMode == modeSystem {
 		_ = setSystemProxy(a.st.HttpPort)
 	}
+	return nil
 }
 
 // showWindow re-opens the main window after it was hidden to the tray.
 func (a *App) showWindow() {
-	if a.ctx == nil {
+	if a.mainWindow == nil {
 		return
 	}
 	becomeForeground(windowTitle)
-	wailsRuntime.WindowUnminimise(a.ctx)
-	wailsRuntime.WindowShow(a.ctx)
+	a.mainWindow.UnMinimise()
+	a.mainWindow.Show()
+	a.mainWindow.Focus()
 }
 
 // quit stops the engine and exits, bypassing the hide-to-tray close guard.
 func (a *App) quit() {
 	a.quitting = true
-	wailsRuntime.Quit(a.ctx)
+	a.wails.Quit()
 }
 
 // GetState returns the current GUI state to the frontend.
@@ -112,28 +113,15 @@ func (a *App) DeleteNode(index int) error {
 	return a.restartEngine()
 }
 
-// AddNodeUI opens the native OS editor for a new node and adds it on confirm.
-// It is a no-op where nodeDialogSupported is false (the frontend keeps the
-// HTML modal there).
+// AddNodeUI opens the editor for a new node in its own window. The window
+// writes through AddNode itself, so there is nothing to collect here.
 func (a *App) AddNodeUI() error {
-	n, ok := runNodeDialog(Node{Protocol: "vless", Transport: "xhttp"})
-	if !ok {
-		return nil
-	}
-	return a.AddNode(n)
+	return a.openNodeWindow(-1)
 }
 
-// EditNodeUI opens the native OS editor prefilled with the node at index and
-// updates it on confirm.
+// EditNodeUI opens the editor for the node at index.
 func (a *App) EditNodeUI(index int) error {
-	if index < 0 || index >= len(a.st.Nodes) {
-		return fmt.Errorf("invalid index: %d", index)
-	}
-	n, ok := runNodeDialog(a.st.Nodes[index])
-	if !ok {
-		return nil
-	}
-	return a.UpdateNode(index, n)
+	return a.openNodeWindow(index)
 }
 
 // SelectNode sets the active node.
@@ -233,8 +221,6 @@ func (a *App) GetPlatformInfo() map[string]bool {
 		"trayCanHide":          trayCanHide,
 		"systemProxySupported": systemProxySupported,
 		"nativeContextMenu":    nativeContextMenuSupported,
-		"nodeDialog":           nodeDialogSupported,
-		"settingsDialog":       settingsDialogSupported,
 		"tunSupported":         tunplat.Supported(),
 	}
 }
@@ -242,12 +228,11 @@ func (a *App) GetPlatformInfo() map[string]bool {
 // ShowContextMenu pops a native OS shortcut menu with the given newline
 // separated labels at the mouse cursor and returns the selected index, or -1
 // when dismissed. The frontend only calls it when GetPlatformInfo reports
-// nativeContextMenu. Plain string/int types keep this method inside Wails'
-// runtime binding support matrix; (int, error) results in it being dropped.
+// nativeContextMenu.
 func (a *App) ShowContextMenu(labelsNL string) int {
 	sel, err := showNativeContextMenu(strings.Split(labelsNL, "\n"))
 	if err != nil {
-		wailsRuntime.LogWarning(a.ctx, "native context menu unavailable: "+err.Error())
+		println("native context menu unavailable: " + err.Error())
 		return -1
 	}
 	return sel

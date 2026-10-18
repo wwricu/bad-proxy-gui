@@ -181,26 +181,27 @@ body {
     margin: 4px 0;
 }
 
-/* Dialog cards (node editor, settings) */
-.modal-overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 1100;
-    background: rgba(20, 24, 28, 0.45);
+/* Form windows: the settings sheet and the node editor are whole windows whose
+   only content is one card, so the card is the page. The window is fixed-size
+   and sized to the tallest form, which is why the old viewport-proportioned
+   ceiling is gone - there is nothing left to squeeze the card into. */
+body.form-page {
     display: flex;
-    align-items: center;
-    justify-content: center;
+    height: 100vh;
+    padding: 12px;
+    /* auto, not hidden: a form that somehow does not fit stays reachable
+       instead of being clipped by a window the user cannot resize. */
+    overflow: auto;
 }
 
 .modal {
-    width: 380px;
-    /* A percentage ceiling made the tallest card scroll at the window's minimum
-       size: the card needs a fixed margin, not nine tenths of whatever is left. */
-    max-height: calc(100vh - 24px);
-    overflow-y: auto;
+    /* auto margins centre the card in both axes without the clipping that
+       align-items: centre causes once the content exceeds the container. */
+    margin: auto;
+    width: 100%;
     background: white;
     border-radius: 8px;
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.10);
     padding: 16px;
 }
 

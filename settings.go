@@ -47,10 +47,10 @@ func portNumber(p string) (int, error) {
 	return n, nil
 }
 
-// settingsDraft snapshots what the settings window opens with. The tunnel is
-// read live, not from the flag: the flag never survives a restart, and a run
-// where up() failed must not come back with the box still ticked.
-func (a *App) settingsDraft() Settings {
+// SettingsDraft is what the settings window opens with. The tunnel is read
+// live, not from the flag: the flag never survives a restart, and a run where
+// up() failed must not come back with the box still ticked.
+func (a *App) SettingsDraft() Settings {
 	return Settings{
 		HttpPort:    a.st.HttpPort,
 		SocksPort:   a.st.SocksPort,
@@ -121,12 +121,10 @@ func (a *App) ApplySettings(s Settings) error {
 	return nil
 }
 
-// SettingsUI opens the settings window. The window commits its own draft on OK,
-// so a confirmed dialog has already reached the engine and a dismissed one has
-// not - either way there is nothing to report back to the page, and a refusal is
-// read on the window that raised it. Like the node editor this is a no-op where
-// settingsDialogSupported is false: the frontend keeps the HTML card there and
-// calls ApplySettings itself.
+// SettingsUI opens the settings window. That window commits its own draft on
+// OK, so a confirmed sheet has already reached the engine and a dismissed one
+// has not - either way there is nothing to collect here, and a refusal is read
+// on the window that raised it.
 func (a *App) SettingsUI() {
-	runSettingsDialog(a.settingsDraft(), a.ApplySettings)
+	a.openSettingsWindow()
 }

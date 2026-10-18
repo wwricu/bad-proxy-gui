@@ -4,7 +4,6 @@ package main
 
 import (
 	"fmt"
-	"os"
 	"runtime"
 	"sync"
 	"syscall"
@@ -17,32 +16,27 @@ import (
 const nativeContextMenuSupported = true
 
 var (
-	user32Ctx                    = syscall.NewLazyDLL("user32.dll")
-	kernel32Ctx                  = syscall.NewLazyDLL("kernel32.dll")
-	procCreatePopupMenu          = user32Ctx.NewProc("CreatePopupMenu")
-	procAppendMenuW              = user32Ctx.NewProc("AppendMenuW")
-	procTrackPopupMenuEx         = user32Ctx.NewProc("TrackPopupMenuEx")
-	procDestroyMenu              = user32Ctx.NewProc("DestroyMenu")
-	procGetCursorPos             = user32Ctx.NewProc("GetCursorPos")
-	procGetLastError             = kernel32Ctx.NewProc("GetLastError")
-	procPostMessage              = user32Ctx.NewProc("PostMessageW")
-	procSetForeground            = user32Ctx.NewProc("SetForegroundWindow")
-	procGetForeground            = user32Ctx.NewProc("GetForegroundWindow")
-	procRegisterClassExW         = user32Ctx.NewProc("RegisterClassExW")
-	procCreateWindowExW          = user32Ctx.NewProc("CreateWindowExW")
-	procShowWindow               = user32Ctx.NewProc("ShowWindow")
-	procDefWindowProcW           = user32Ctx.NewProc("DefWindowProcW")
-	procPeekMessageW             = user32Ctx.NewProc("PeekMessageW")
-	procTranslateMessage         = user32Ctx.NewProc("TranslateMessage")
-	procDispatchMessageW         = user32Ctx.NewProc("DispatchMessageW")
-	procMsgWait                  = user32Ctx.NewProc("MsgWaitForMultipleObjects")
-	procGetModuleHandleW         = kernel32Ctx.NewProc("GetModuleHandleW")
-	procMessageBoxW              = user32Ctx.NewProc("MessageBoxW")
-	procEnumWindows              = user32Ctx.NewProc("EnumWindows")
-	procIsWindowVisible          = user32Ctx.NewProc("IsWindowVisible")
-	procGetWindowTextW           = user32Ctx.NewProc("GetWindowTextW")
-	procGetWindowThreadProcessId = user32Ctx.NewProc("GetWindowThreadProcessId")
-	procBringToTop               = user32Ctx.NewProc("BringWindowToTop")
+	user32Ctx            = syscall.NewLazyDLL("user32.dll")
+	kernel32Ctx          = syscall.NewLazyDLL("kernel32.dll")
+	procCreatePopupMenu  = user32Ctx.NewProc("CreatePopupMenu")
+	procAppendMenuW      = user32Ctx.NewProc("AppendMenuW")
+	procTrackPopupMenuEx = user32Ctx.NewProc("TrackPopupMenuEx")
+	procDestroyMenu      = user32Ctx.NewProc("DestroyMenu")
+	procGetCursorPos     = user32Ctx.NewProc("GetCursorPos")
+	procGetLastError     = kernel32Ctx.NewProc("GetLastError")
+	procPostMessage      = user32Ctx.NewProc("PostMessageW")
+	procSetForeground    = user32Ctx.NewProc("SetForegroundWindow")
+	procGetForeground    = user32Ctx.NewProc("GetForegroundWindow")
+	procRegisterClassExW = user32Ctx.NewProc("RegisterClassExW")
+	procCreateWindowExW  = user32Ctx.NewProc("CreateWindowExW")
+	procShowWindow       = user32Ctx.NewProc("ShowWindow")
+	procDefWindowProcW   = user32Ctx.NewProc("DefWindowProcW")
+	procPeekMessageW     = user32Ctx.NewProc("PeekMessageW")
+	procTranslateMessage = user32Ctx.NewProc("TranslateMessage")
+	procDispatchMessageW = user32Ctx.NewProc("DispatchMessageW")
+	procMsgWait          = user32Ctx.NewProc("MsgWaitForMultipleObjects")
+	procGetModuleHandleW = kernel32Ctx.NewProc("GetModuleHandleW")
+	procMessageBoxW      = user32Ctx.NewProc("MessageBoxW")
 )
 
 const (
@@ -65,6 +59,7 @@ const (
 	mbIconQuestion = 0x00000020
 	mbIconWarning  = 0x00000030
 	mbDefButton2   = 0x00000100
+	mbSystemModal  = 0x00001000
 	idYes          = 6
 )
 
@@ -242,47 +237,24 @@ func showNativeContextMenu(labels []string) (int, error) {
 	}
 }
 
-// mainWindowHwnd locates this process's own main window so dialogs can be
-// centred on it and owned by it. FindWindowW by caption cannot be used here:
-// the WebView2 top-level is not matched reliably that way, and a 0 handle made
-// the node editor centre itself off-screen with nothing to centre against.
-// Enumerating top-level windows and matching the caption plus our PID is exact.
-func mainWindowHwnd() uintptr {
-	pid := uint32(os.Getpid())
-	best := uintptr(0)
-	cb := syscall.NewCallback(func(h, _ uintptr) uintptr {
-		if v, _, _ := procIsWindowVisible.Call(h); v == 0 {
-			return 1
-		}
-		buf := make([]uint16, 128)
-		n, _, _ := procGetWindowTextW.Call(h, uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)))
-		if n == 0 || syscall.UTF16ToString(buf) != windowTitle {
-			return 1
-		}
-		var wpid uint32
-		procGetWindowThreadProcessId.Call(h, uintptr(unsafe.Pointer(&wpid)))
-		if wpid != pid {
-			return 1
-		}
-		best = h
-		return 0
-	})
-	procEnumWindows.Call(cb, 0)
-	return best
-}
-
 // showMessageBox pops a real OS dialog and reports whether the user confirmed.
+//
+// The owner is deliberately nil, with MB_SYSTEMMODAL standing in for the
+// parent link. Passing a Wails window handle as the owner is not an option:
+// go-webview2's host window aborts the process outright when a modal is bound
+// to it, and the owning window is whichever form raised the dialog anyway, not
+// something this function can know.
 func showMessageBox(title, message string, confirm bool) bool {
 	t, err1 := syscall.UTF16PtrFromString(title)
 	m, err2 := syscall.UTF16PtrFromString(message)
 	if err1 != nil || err2 != nil {
 		return false
 	}
-	style := uintptr(mbOk | mbIconWarning)
+	style := uintptr(mbOk | mbIconWarning | mbSystemModal)
 	if confirm {
-		style = mbYesNo | mbIconQuestion | mbDefButton2
+		style = mbYesNo | mbIconQuestion | mbDefButton2 | mbSystemModal
 	}
-	r, _, _ := procMessageBoxW.Call(ndMessageOwner(),
+	r, _, _ := procMessageBoxW.Call(0,
 		uintptr(unsafe.Pointer(m)), uintptr(unsafe.Pointer(t)), style)
 	if confirm {
 		return r == idYes

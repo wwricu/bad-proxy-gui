@@ -41,7 +41,8 @@
         </button>
     </div>
 
-    <!-- Node context menu -->
+    <!-- Node context menu: the fallback where the OS menu is not available
+         (macOS/Linux). Windows pops a real Win32 menu instead. -->
     <div id="ctxMenu" class="ctx-menu" style="display:none;">
         <div class="ctx-item" id="ctxTest">Test</div>
         <div class="ctx-item" id="ctxEdit">Edit</div>
@@ -49,85 +50,7 @@
         <div class="ctx-item danger" id="ctxDelete">Delete</div>
     </div>
 
-    <!-- Node add/edit modal -->
-    <div id="modalOverlay" class="modal-overlay" style="display:none;">
-        <div class="modal">
-            <div class="form-grid">
-                <label>Name</label><input type="text" id="fName">
-                <label>Protocol</label>
-                <select id="fProtocol">
-                    <option value="vless">vless</option>
-                    <option value="btp">btp</option>
-                    <option value="trojan">trojan</option>
-                    <option value="socks">socks</option>
-                </select>
-                <label>Address</label><input type="text" id="fServer">
-                <label>Port</label><input type="text" id="fPort">
-                <label id="lSecret">Secret</label><input type="text" id="fSecret">
-                <label>Transport</label>
-                <select id="fTransport">
-                    <option value="tls">tls</option>
-                    <option value="xhttp">xhttp</option>
-                </select>
-                <label id="lAuthority">Domain (SNI/Host)</label><input type="text" id="fAuthority">
-                <label id="lPath">Path</label><input type="text" id="fPath">
-                <label id="lPadding">Padding range</label><input type="text" id="fPadding">
-            </div>
-            <div class="modal-actions">
-                <button id="modalCancel" class="btn-secondary">Cancel</button>
-                <button id="modalSave" class="btn-primary">Save</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Settings card: the HTML twin of the native settings window. Nothing
-         here applies until OK. -->
-    <div id="settingsOverlay" class="modal-overlay" style="display:none;">
-        <div class="modal">
-            <div class="form-grid">
-                <label>HTTP port</label><input type="text" id="sHttpPort">
-                <label>SOCKS port</label><input type="text" id="sSocksPort">
-                <label>Mode</label>
-                <select id="sMode">
-                    <option value="direct">Direct</option>
-                    <option value="proxy">Proxy</option>
-                    <option value="system">System proxy</option>
-                </select>
-                <label>Routing</label>
-                <select id="sRouting">
-                    <option value="global">Global</option>
-                    <option value="cn-whitelist">Bypass CN</option>
-                    <option value="gfw-blacklist">Bypass GFW</option>
-                </select>
-            </div>
-            <div class="check-grid">
-                <div class="checkbox-row" id="sTunRow">
-                    <input type="checkbox" id="sTun">
-                    <label for="sTun">TUN mode (takes over system traffic)</label>
-                </div>
-                <div class="checkbox-row">
-                    <input type="checkbox" id="sLAN">
-                    <label for="sLAN">Allow LAN access</label>
-                </div>
-                <div class="checkbox-row" id="sLoginRow" style="display:none;">
-                    <input type="checkbox" id="sLogin">
-                    <label for="sLogin">Start at login</label>
-                </div>
-                <div class="checkbox-row" id="sTrayRow" style="display:none;">
-                    <input type="checkbox" id="sTray">
-                    <label for="sTray">Hide tray icon (after restart)</label>
-                </div>
-            </div>
-            <!-- Where an OK that did not take effect says why, beside the box
-                 that caused it. -->
-            <div id="sMsg" class="form-msg" aria-live="polite"></div>
-            <div class="modal-actions">
-                <button id="settingsCancel" class="btn-secondary">Cancel</button>
-                <button id="settingsOK" class="btn-primary">OK</button>
-            </div>
-        </div>
-    </div>
-
-    <script src="src/app.js"></script>
+    <script type="module" src="/wails/runtime.js"></script>
+    <script type="module" src="src/app.js"></script>
 </body>
 </html>

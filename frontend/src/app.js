@@ -1,14 +1,13 @@
-// Wails runtime will be injected automatically
-const API = () => window.go.main.App;
+import { Events } from "/wails/runtime.js";
+import { API } from './bridge.js';
 
 let state = null;
 let platformInfo = null;
 let nodeResults = {};   // idx -> last test text
 let ctxIdx = -1;        // node under the context menu
-let editIdx = -1;       // -1 = add, >=0 = edit
 
-// The status bar and the settings card name the same choices with the same
-// words as the native settings window, so a mode is one thing on screen.
+// The status bar and the settings window name the same choices with the same
+// words, so a mode is one thing on screen.
 const MODE_LABELS = { direct: 'Direct', proxy: 'Proxy', system: 'System proxy' };
 const ROUTING_LABELS = { global: 'Global', 'cn-whitelist': 'Bypass CN', 'gfw-blacklist': 'Bypass GFW' };
 
@@ -153,203 +152,38 @@ document.getElementById('ctxDelete').onclick = () => {
     if (ctxIdx >= 0) ctxActionDelete(ctxIdx);
 };
 
-// ---- node form ----
+// ---- forms ----
 
-// Mirrors the backend's visibleNodeFields: which optional fields apply.
-function visibleFields(protocol, transport) {
-    const f = { secret: protocol !== 'socks', authority: false, path: false, padding: false };
-    if (transport === 'tls') f.authority = true;
-    if (transport === 'xhttp') { f.authority = true; f.path = true; f.padding = true; }
-    return f;
-}
-
-function applyFieldVisibility() {
-    const f = visibleFields(document.getElementById('fProtocol').value, document.getElementById('fTransport').value);
-    setRow('lSecret', 'fSecret', f.secret);
-    setRow('lAuthority', 'fAuthority', f.authority);
-    setRow('lPath', 'fPath', f.path);
-    setRow('lPadding', 'fPadding', f.padding);
-}
-
-function setRow(labelId, inputId, visible) {
-    document.getElementById(labelId).style.display = visible ? 'block' : 'none';
-    document.getElementById(inputId).style.display = visible ? 'block' : 'none';
-}
-
-function openForm(idx) {
-    editIdx = idx;
-    const n = idx < 0 ? { name: '', protocol: 'vless', server: '', port: '', secret: '', transport: 'xhttp', path: '', authority: '', padding: '' } : state.nodes[idx];
-    document.getElementById('fName').value = n.name || '';
-    document.getElementById('fProtocol').value = n.protocol || 'vless';
-    document.getElementById('fServer').value = n.server || '';
-    document.getElementById('fPort').value = n.port || '';
-    document.getElementById('fSecret').value = n.secret || '';
-    document.getElementById('fTransport').value = n.transport || 'xhttp';
-    document.getElementById('fAuthority').value = n.authority || '';
-    document.getElementById('fPath').value = n.path || '';
-    document.getElementById('fPadding').value = n.padding || '';
-    applyFieldVisibility();
-    document.getElementById('modalOverlay').style.display = 'flex';
-    document.getElementById('fName').focus();
-}
-
-document.getElementById('modalCancel').onclick = () => {
-    document.getElementById('modalOverlay').style.display = 'none';
-};
-
-document.getElementById('modalSave').onclick = async () => {
-    const node = {
-        name: document.getElementById('fName').value.trim(),
-        protocol: document.getElementById('fProtocol').value,
-        server: document.getElementById('fServer').value.trim(),
-        port: document.getElementById('fPort').value.trim(),
-        secret: document.getElementById('fSecret').value.trim(),
-        transport: document.getElementById('fTransport').value,
-        path: document.getElementById('fPath').value.trim(),
-        authority: document.getElementById('fAuthority').value.trim(),
-        padding: document.getElementById('fPadding').value.trim(),
-    };
-    if (!node.name || !node.server || !node.port) {
-        const shown = await API().InfoDialog('Bad Proxy', 'Name, address and port are required');
-        if (!shown) setStatus('Name, address and port are required');
-        return;
-    }
-    let saved = true;
+// Both forms are windows of their own, opened by the backend. They write
+// through the same bound methods this page would have used, so the only thing
+// to do here is raise the window and refresh once it has gone away.
+async function openFormWindow(add, idx) {
     try {
-        if (editIdx < 0) {
-            await API().AddNode(node);
-        } else {
-            await API().UpdateNode(editIdx, node);
-        }
+        if (add) await API().AddNodeUI();
+        else await API().EditNodeUI(idx);
     } catch (err) {
-        // A restart error still means the node reached the state file.
+        // A refusal to open is the only failure this call can report: by the
+        // time a save fails the node is already on disk, and that says so in
+        // the form window itself.
         setStatus(err.message);
-        saved = false;
     }
-    if (saved) document.getElementById('modalOverlay').style.display = 'none';
+}
+
+document.getElementById('addNodeRow').onclick = () => openFormWindow(true, -1);
+
+function editNode(idx) {
+    openFormWindow(false, idx);
+}
+
+document.getElementById('gearBtn').onclick = () => API().SettingsUI();
+
+// The form windows write state this page displays, so closing one is the signal
+// to reread. Test results are dropped with it: applying settings restarts the
+// engine, so the last latency is no longer a measurement of what is running.
+Events.On('state-changed', () => {
     nodeResults = {};
-    await loadState();
-};
-
-document.getElementById('fProtocol').onchange = applyFieldVisibility;
-document.getElementById('fTransport').onchange = applyFieldVisibility;
-document.getElementById('addNodeRow').onclick = () => editNode(-1);
-
-// editNode picks the editor backend: a real OS dialog where supported
-// (Windows), otherwise the in-page HTML modal.
-async function editNode(idx) {
-    if (platformInfo && platformInfo.nodeDialog) {
-        try {
-            if (idx < 0) await API().AddNodeUI();
-            else await API().EditNodeUI(idx);
-        } catch (err) {
-            // The node is already on disk by the time a restart fails, so the
-            // list must still refresh; only the engine status is in doubt.
-            setStatus(err.message);
-        }
-        nodeResults = {};
-        await loadState();
-        return;
-    }
-    openForm(idx);
-}
-
-// ---- settings window ----
-
-// setFormMsg writes the settings card's own message line. A setting that failed
-// to take effect belongs beside the box that caused it, and the card is what the
-// user is looking at when it fails, so this replaces the old status-bar report.
-function setFormMsg(text, busy) {
-    const el = document.getElementById('sMsg');
-    el.textContent = text || '';
-    el.classList.toggle('busy', !!busy);
-}
-
-// openSettings picks the backend the same way the node editor does: a real OS
-// window where Wails can hand one over (Windows), the in-page card elsewhere.
-async function openSettings() {
-    if (platformInfo && platformInfo.settingsDialog) {
-        // The native window applies its own draft and reports a refusal on its
-        // own message line, so there is nothing to say out here.
-        await API().SettingsUI();
-        await loadState();
-        return;
-    }
-    document.getElementById('sHttpPort').value = state.http_port || '10809';
-    document.getElementById('sSocksPort').value = state.socks_port || '10808';
-    document.getElementById('sMode').value = state.proxy_mode || 'direct';
-    document.getElementById('sRouting').value = state.routing_mode || 'global';
-    document.getElementById('sTun').checked = !!state.tun_enabled;
-    document.getElementById('sLAN').checked = !!state.allow_lan;
-    document.getElementById('sLogin').checked = !!state.start_login;
-    document.getElementById('sTray').checked = !!state.hide_tray;
-
-    document.getElementById('sTunRow').style.display =
-        platformInfo && platformInfo.tunSupported ? 'flex' : 'none';
-    document.getElementById('sLoginRow').style.display =
-        platformInfo && platformInfo.startLoginSupported ? 'flex' : 'none';
-    document.getElementById('sTrayRow').style.display =
-        platformInfo && platformInfo.trayCanHide ? 'flex' : 'none';
-    // System-proxy mode only exists where the OS proxy can actually be set.
-    const sysOpt = document.querySelector('#sMode option[value="system"]');
-    if (sysOpt && platformInfo && !platformInfo.systemProxySupported) sysOpt.remove();
-
-    syncTunRow();
-    setFormMsg('');
-    document.getElementById('settingsOverlay').style.display = 'flex';
-    document.getElementById('sHttpPort').focus();
-}
-
-// syncTunRow keeps the tunnel honest about the mode: direct has no node for it
-// to carry traffic through, so the box comes unticked and unusable until a
-// proxy mode is picked. The native window does exactly the same.
-function syncTunRow() {
-    const row = document.getElementById('sTunRow');
-    const tun = document.getElementById('sTun');
-    const off = document.getElementById('sMode').value === 'direct';
-    tun.disabled = off;
-    if (off) tun.checked = false;
-    row.classList.toggle('muted', off);
-}
-
-document.getElementById('sMode').onchange = syncTunRow;
-
-document.getElementById('gearBtn').onclick = openSettings;
-
-document.getElementById('settingsCancel').onclick = () => {
-    document.getElementById('settingsOverlay').style.display = 'none';
-};
-
-document.getElementById('settingsOK').onclick = async () => {
-    const draft = {
-        http_port: document.getElementById('sHttpPort').value.trim(),
-        socks_port: document.getElementById('sSocksPort').value.trim(),
-        proxy_mode: document.getElementById('sMode').value,
-        routing_mode: document.getElementById('sRouting').value,
-        tun_enabled: document.getElementById('sTun').checked,
-        allow_lan: document.getElementById('sLAN').checked,
-        start_login: document.getElementById('sLogin').checked,
-        hide_tray: document.getElementById('sTray').checked,
-    };
-    // Bringing the tunnel up or down touches the virtual adapter and the system
-    // resolver, and can wait on an elevation prompt, so the button is locked
-    // while OK is in flight.
-    const btn = document.getElementById('settingsOK');
-    btn.disabled = true;
-    setFormMsg('Applying...', true);
-    try {
-        await API().ApplySettings(draft);
-        document.getElementById('settingsOverlay').style.display = 'none';
-    } catch (err) {
-        // The card stays open with what the user typed. The tunnel is the
-        // setting that fails after the engine is already moving - it needs an
-        // adapter and an elevation the user may decline - and its reason is
-        // worthless on the status bar once the window is gone.
-        setFormMsg(err.message);
-        await loadState();
-    }
-    btn.disabled = false;
-};
+    loadState().catch((err) => setStatus('Load failed: ' + err.message));
+});
 
 // ---- nodes ----
 

@@ -8,6 +8,10 @@ const hasTray = false
 
 const trayCanHide = false
 
-// trayTitle only has to exist for trayMenu to compile; startTray never runs
+// trayTitle only has to exist for setupTray to compile; the tray never runs
 // where hasTray is false.
 const trayTitle = "Bad Proxy"
+
+// trayHasMenu only has to exist for setupTray to compile; the tray never runs
+// where hasTray is false.
+const trayHasMenu = false
