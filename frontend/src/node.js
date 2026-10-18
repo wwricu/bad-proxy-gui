@@ -1,15 +1,10 @@
 import { API } from './bridge.js';
-import { Window } from "/wails/runtime.js";
+import * as sheet from './sheet.js';
 
-// The editor for one node. Which node is in the URL: ?index=N edits that entry,
-// no index means a new one. The draft is this window's own; Save is the only
-// write.
+// The editor for one node, as a sheet over the list. The draft is this sheet's
+// own; Save is the only write.
 
-const editIdx = (() => {
-    const raw = new URL(location.href).searchParams.get('index');
-    const n = raw === null ? -1 : parseInt(raw, 10);
-    return Number.isInteger(n) ? n : -1;
-})();
+let editIdx = -1;
 
 function setFormMsg(text) {
     document.getElementById('fMsg').textContent = text || '';
@@ -36,9 +31,9 @@ function applyFieldVisibility() {
     setRow('lPadding', 'fPadding', f.padding);
 }
 
-async function init() {
+async function fill(index) {
     const state = await API().GetState();
-    const n = editIdx < 0 ? {} : (state.nodes || [])[editIdx] || {};
+    const n = index < 0 ? {} : (state.nodes || [])[index] || {};
     document.getElementById('fName').value = n.name || '';
     document.getElementById('fProtocol').value = n.protocol || 'vless';
     document.getElementById('fServer').value = n.server || '';
@@ -52,9 +47,19 @@ async function init() {
     document.getElementById('fName').focus();
 }
 
+export function openNodeSheet(index) {
+    editIdx = index;
+    document.getElementById('nodeSheetTitle').textContent = index < 0 ? 'Add node' : 'Edit node';
+    document.getElementById('modalSave').disabled = false;
+    setFormMsg('');
+    sheet.show('nodeSheet');
+    fill(index).catch((err) => setFormMsg('Load failed: ' + err.message));
+}
+
 document.getElementById('fProtocol').onchange = applyFieldVisibility;
 document.getElementById('fTransport').onchange = applyFieldVisibility;
-document.getElementById('modalCancel').onclick = () => Window.Close();
+document.getElementById('modalCancel').onclick = sheet.close;
+document.getElementById('nodeCloseTop').onclick = sheet.close;
 
 document.getElementById('modalSave').onclick = async () => {
     const node = {
@@ -83,12 +88,10 @@ document.getElementById('modalSave').onclick = async () => {
         }
     } catch (err) {
         // A restart error still means the node reached the state file, so the
-        // window stays open only to say that.
+        // sheet stays open only to say that.
         setFormMsg(err.message);
         btn.disabled = false;
         return;
     }
-    await Window.Close();
+    sheet.close();
 };
-
-init().catch((err) => setFormMsg('Load failed: ' + err.message));

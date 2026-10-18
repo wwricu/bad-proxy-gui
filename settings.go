@@ -120,11 +120,3 @@ func (a *App) ApplySettings(s Settings) error {
 	}
 	return nil
 }
-
-// SettingsUI opens the settings window. That window commits its own draft on
-// OK, so a confirmed sheet has already reached the engine and a dismissed one
-// has not - either way there is nothing to collect here, and a refusal is read
-// on the window that raised it.
-func (a *App) SettingsUI() {
-	a.openSettingsWindow()
-}

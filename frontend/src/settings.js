@@ -1,16 +1,14 @@
 import { API } from './bridge.js';
-import { Window } from "/wails/runtime.js";
+import * as sheet from './sheet.js';
 
-// The settings window is the only settings UI on every platform, so this is the
-// code that used to have an HTML-card twin and a native Win32 twin. Nothing
-// here applies until OK.
+// The settings sheet is the only settings UI on every platform. Nothing here
+// applies until OK.
 
 const MODE_LABELS = { direct: 'Direct', proxy: 'Proxy', system: 'System proxy' };
 const ROUTING_LABELS = { global: 'Global', 'cn-whitelist': 'Bypass CN', 'gfw-blacklist': 'Bypass GFW' };
 
-// setFormMsg writes this window's own message line. A setting that failed to
-// take effect belongs beside the box that caused it, and this window is what
-// the user is looking at when it fails.
+// A setting that failed to take effect is read beside the box that caused it,
+// which is the part of the window the user is looking at when it fails.
 function setFormMsg(text, busy) {
     const el = document.getElementById('sMsg');
     el.textContent = text || '';
@@ -29,7 +27,7 @@ function syncTunRow() {
     row.classList.toggle('muted', off);
 }
 
-async function init() {
+async function fill() {
     // The draft, not GetState: the tunnel is whatever is actually running, so a
     // run where up() failed must not open with the box ticked.
     const [draft, platform] = await Promise.all([API().SettingsDraft(), API().GetPlatformInfo()]);
@@ -56,9 +54,16 @@ async function init() {
     document.getElementById('sHttpPort').focus();
 }
 
-document.getElementById('sMode').onchange = syncTunRow;
+export function openSettingsSheet() {
+    document.getElementById('settingsOK').disabled = false;
+    setFormMsg('');
+    sheet.show('settingsSheet');
+    fill().catch((err) => setFormMsg('Load failed: ' + err.message));
+}
 
-document.getElementById('settingsCancel').onclick = () => Window.Close();
+document.getElementById('sMode').onchange = syncTunRow;
+document.getElementById('settingsCancel').onclick = sheet.close;
+document.getElementById('settingsCloseTop').onclick = sheet.close;
 
 document.getElementById('settingsOK').onclick = async () => {
     const draft = {
@@ -72,30 +77,30 @@ document.getElementById('settingsOK').onclick = async () => {
         hide_tray: document.getElementById('sTray').checked,
     };
     // Bringing the tunnel up or down touches the virtual adapter and the system
-    // resolver, and can wait on an elevation prompt, so the button is locked
+    // resolver, and can wait on an elevation prompt, so the sheet is locked
     // while OK is in flight.
     const btn = document.getElementById('settingsOK');
     btn.disabled = true;
+    sheet.lock(true);
     setFormMsg('Applying...', true);
     try {
         await API().ApplySettings(draft);
     } catch (err) {
-        // The window stays open with what the user typed: the tunnel is the
+        sheet.lock(false);
+        // The sheet stays open with what the user typed: the tunnel is the
         // setting that fails after the engine is already moving, and its reason
-        // is worthless once the window is gone.
+        // is worthless once the sheet is gone.
         setFormMsg(err.message);
         btn.disabled = false;
         // Some of the draft may have reached the disk before the refusal, so
         // reread rather than keep claiming the old values.
-        const draft = await API().SettingsDraft();
-        document.getElementById('sHttpPort').value = draft.http_port;
-        document.getElementById('sSocksPort').value = draft.socks_port;
-        document.getElementById('sTun').checked = !!draft.tun_enabled;
+        const applied = await API().SettingsDraft();
+        document.getElementById('sHttpPort').value = applied.http_port;
+        document.getElementById('sSocksPort').value = applied.socks_port;
+        document.getElementById('sTun').checked = !!applied.tun_enabled;
         return;
     }
+    sheet.lock(false);
     setFormMsg('');
-    // The main page watches for this window closing and rereads the state.
-    await Window.Close();
+    sheet.close();
 };
-
-init().catch((err) => setFormMsg('Load failed: ' + err.message));

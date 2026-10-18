@@ -15,9 +15,19 @@ var bundled embed.FS
 // the main window by it, so it must stay in sync with the window's Title.
 const windowTitle = "Bad Proxy GUI"
 
-// mainWindowName identifies the one window that always exists. Editors and
-// settings are separate windows and never take this name.
+// mainWindowName identifies the one window that always exists. The node editor
+// and the settings sheet are drawn inside it and never take this name.
 const mainWindowName = "main"
+
+// The window is sized by the two things that must fit in it: the widest status
+// bar (two actions plus four readouts) and the tallest sheet, the node editor
+// with every optional field visible. The self-test drives these same numbers.
+const (
+	mainWindowWidth  = 860
+	mainWindowHeight = 600
+	mainWindowMinW   = 720
+	mainWindowMinH   = 540
+)
 
 func main() {
 	// The tray is declared before the run loop starts, and whether it exists
@@ -53,15 +63,12 @@ func main() {
 	})
 
 	win := wails.Window.NewWithOptions(application.WebviewWindowOptions{
-		Name:     mainWindowName,
-		Title:    windowTitle,
-		Width:    820,
-		Height:   500,
-		MinWidth: 640,
-		// The floor is the main page's own content, not the editors' any more:
-		// those are windows of their own now, so shrinking the list can no
-		// longer push a form into a scrollbar.
-		MinHeight: 420,
+		Name:      mainWindowName,
+		Title:     windowTitle,
+		Width:     mainWindowWidth,
+		Height:    mainWindowHeight,
+		MinWidth:  mainWindowMinW,
+		MinHeight: mainWindowMinH,
 		URL:       "/",
 	})
 

@@ -1,5 +1,7 @@
-import { Events } from "/wails/runtime.js";
 import { API } from './bridge.js';
+import * as sheet from './sheet.js';
+import { openNodeSheet } from './node.js';
+import { openSettingsSheet } from './settings.js';
 
 let state = null;
 let platformInfo = null;
@@ -157,33 +159,19 @@ document.getElementById('ctxDelete').onclick = () => {
 
 // ---- forms ----
 
-// Both forms are windows of their own, opened by the backend. They write
-// through the same bound methods this page would have used, so the only thing
-// to do here is raise the window and refresh once it has gone away.
-async function openFormWindow(add, idx) {
-    try {
-        if (add) await API().AddNodeUI();
-        else await API().EditNodeUI(idx);
-    } catch (err) {
-        // A refusal to open is the only failure this call can report: by the
-        // time a save fails the node is already on disk, and that says so in
-        // the form window itself.
-        setStatus(err.message);
-    }
-}
-
-document.getElementById('addNodeBtn').onclick = () => openFormWindow(true, -1);
+// Both forms are sheets over this window, opened here and written through the
+// same bound methods this page would have used.
+document.getElementById('addNodeBtn').onclick = () => openNodeSheet(-1);
+document.getElementById('gearBtn').onclick = openSettingsSheet;
 
 function editNode(idx) {
-    openFormWindow(false, idx);
+    openNodeSheet(idx);
 }
 
-document.getElementById('gearBtn').onclick = () => API().SettingsUI();
-
-// The form windows write state this page displays, so closing one is the signal
-// to reread. Test results are dropped with it: applying settings restarts the
+// A sheet writes the state this page displays, so closing one is the signal to
+// reread. Test results are dropped with it: applying settings restarts the
 // engine, so the last latency is no longer a measurement of what is running.
-Events.On('state-changed', () => {
+sheet.onSheetClosed(() => {
     nodeResults = {};
     loadState().catch((err) => setStatus('Load failed: ' + err.message));
 });

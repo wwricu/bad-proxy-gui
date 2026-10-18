@@ -22,17 +22,15 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/events"
 )
 
-// Drives the v3 form windows the way the buttons do, checks what the pages
-// actually rendered, and writes a screenshot of each window. This replaces the
-// Win32 dialog self-tests: the forms are webviews now, so the checks read the
-// DOM through the runtime instead of sending control messages to widgets, and
-// the pixels come from PrintWindow because a background process cannot take the
-// foreground.
+// Drives the app the way the buttons do, checks what the page actually
+// rendered, and writes a screenshot of each state. The forms are sheets inside
+// the one window now, so every probe goes to that window and every step starts
+// from a real click on a real control.
 //
 //	BADPROXY_GUI_SELFTEST=1 go test -tags production -run TestFormWindows -count=1 -v
 //
-// An ordinary "go test ./..." run skips it: it opens real windows. Everything it
-// writes goes to a temp directory seeded with a synthetic node, so the user's
+// An ordinary "go test ./..." run skips it: it opens a real window. Everything
+// it writes goes to a temp directory seeded with a synthetic node, so the user's
 // own state.json is never opened. Screenshots are left in %TEMP% to look at.
 const selfTestEnv = "BADPROXY_GUI_SELFTEST"
 
@@ -143,10 +141,10 @@ func runFormSelfTest() int {
 	a.mainWindow = wails.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:      mainWindowName,
 		Title:     windowTitle,
-		Width:     820,
-		Height:    500,
-		MinWidth:  640,
-		MinHeight: 420,
+		Width:     mainWindowWidth,
+		Height:    mainWindowHeight,
+		MinWidth:  mainWindowMinW,
+		MinHeight: mainWindowMinH,
 		URL:       "/",
 	})
 
@@ -176,120 +174,129 @@ func runFormSelfTest() int {
 }
 
 // checkForms is the script. Every step goes through the same entry point the UI
-// uses, and each assertion reads back what the page rendered or what landed on
-// disk.
+// uses - a click on the real button - and each assertion reads back what the
+// page rendered or what landed on disk.
 func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 	time.Sleep(2500 * time.Millisecond)
+	win := a.mainWindow
 
 	// ---- the main window ----
-	c.shot(a.mainWindow, "main")
-	readouts := probe(a.mainWindow, probes, `
+	c.shot(win, "main")
+	readouts := probe(win, probes, `
 		["roHttp","roSocks","roMode","roRouting"].map(id => {
 			const el = document.getElementById(id);
 			return id + "=" + el.tagName + ":" + el.textContent;
-		}).join(" ") + " | cards=" +
-		(document.getElementById("modalOverlay") === null) + "," +
-		(document.getElementById("settingsOverlay") === null)`)
+		}).join(" ") + " | closed=" +
+		(document.getElementById("nodeSheet").hidden && document.getElementById("settingsSheet").hidden)`)
 	c.check(strings.Contains(readouts, "roHttp=SPAN:11909"), "the bar shows the HTTP port as text: %q", readouts)
 	c.check(strings.Contains(readouts, "roSocks=SPAN:11908"), "the bar shows the SOCKS port as text")
 	c.check(strings.Contains(readouts, "roMode=SPAN:Direct"), "the bar names the mode in words")
-	c.check(strings.Contains(readouts, "cards=true,true"), "the in-page form cards are gone")
+	c.check(strings.Contains(readouts, "closed=true"), "both sheets start closed")
 
-	// The minimum size is what the scrollbar report was about: nothing on the
-	// bar may be pushed out of reach now that the forms are elsewhere.
-	a.mainWindow.SetSize(640, 420)
+	// The minimum size is what the layout has to survive: the bar's three zones
+	// stay reachable and the tallest sheet fits without a scrollbar.
+	win.SetSize(mainWindowMinW, mainWindowMinH)
 	time.Sleep(800 * time.Millisecond)
-	fits := probe(a.mainWindow, probes, `
+	fits := probe(win, probes, `
 		(() => {
 			const d = document.documentElement;
 			const bar = document.querySelector(".status-bar");
+			const box = (id) => {
+				const r = document.getElementById(id).getBoundingClientRect();
+				return [Math.round(r.left), Math.round(r.right)];
+			};
 			return {page: [d.scrollWidth, d.clientWidth, d.scrollHeight, d.clientHeight],
 					bar: [bar.clientWidth, bar.scrollWidth],
-					add: Math.round(document.getElementById("addNodeBtn").getBoundingClientRect().right),
-					inBar: !!document.querySelector(".status-bar #addNodeBtn"),
-					gear: Math.round(document.getElementById("gearBtn").getBoundingClientRect().right),
+					add: box("addNodeBtn"), gear: box("gearBtn"),
+					addLabel: document.getElementById("addNodeBtn").textContent.trim(),
+					facts: Math.round(document.querySelector(".readout").getBoundingClientRect().left),
+					statusRight: Math.round(document.getElementById("statusText").getBoundingClientRect().right),
 					inner: d.clientWidth};
 		})()`)
 	var layout struct {
-		Page  [4]int `json:"page"`
-		Bar   [2]int `json:"bar"`
-		Add   int    `json:"add"`
-		InBar bool   `json:"inBar"`
-		Gear  int    `json:"gear"`
-		Inner int    `json:"inner"`
+		Page        [4]int `json:"page"`
+		Bar         [2]int `json:"bar"`
+		Add         [2]int `json:"add"`
+		AddLabel    string `json:"addLabel"`
+		Gear        [2]int `json:"gear"`
+		Facts       int    `json:"facts"`
+		StatusRight int    `json:"statusRight"`
+		Inner       int    `json:"inner"`
 	}
-	c.check(json.Unmarshal([]byte(fits), &layout) == nil, "the main window reports its own layout: %s", fits)
-	c.check(layout.InBar, "both actions live in the status bar")
+	c.check(json.Unmarshal([]byte(fits), &layout) == nil, "the window reports its own layout: %s", fits)
 	if layout.Inner > 0 {
 		c.check(layout.Page[0] <= layout.Page[1]+1, "the page itself does not overflow: %v", layout.Page)
 		c.check(layout.Bar[1] <= layout.Bar[0]+1, "the status bar is not wider than the window: %v", layout.Bar)
-		c.check(layout.Add <= layout.Inner+1 && layout.Add < layout.Gear, "the add button is reachable: right=%d gear=%d inner=%d", layout.Add, layout.Gear, layout.Inner)
-		c.check(layout.Gear <= layout.Inner+1, "the gear is still reachable: right=%d inner=%d", layout.Gear, layout.Inner)
+		c.check(layout.AddLabel == "", "the add button is an icon, not a word: %q", layout.AddLabel)
+		c.check(layout.Add[0] >= 0 && layout.Add[1] <= layout.Gear[0], "the actions keep their order: %v then %v", layout.Add, layout.Gear)
+		c.check(layout.Gear[1] <= layout.Facts, "the actions are the left group, the facts follow: gear=%v facts=%d", layout.Gear, layout.Facts)
+		c.check(layout.StatusRight <= layout.Inner+1 && layout.StatusRight > layout.Inner-40,
+			"the status line holds the right edge: %d of %d", layout.StatusRight, layout.Inner)
 	}
-	c.shot(a.mainWindow, "main-minimum")
-	a.mainWindow.SetSize(820, 500)
-	time.Sleep(500 * time.Millisecond)
+	c.shot(win, "main-minimum")
 
 	// ---- the node editor ----
-	if err := a.AddNodeUI(); err != nil {
-		c.fail("AddNodeUI: %v", err)
+	// The click is the whole entry point; the sheet appears in this window.
+	probe(win, probes, `(() => { document.getElementById("addNodeBtn").click(); return "sent"; })()`)
+	opened := probeUntil(win, probes, `document.getElementById("nodeSheet").hidden`,
+		func(s string) bool { return s == "false" }, 5*time.Second)
+	if opened != "false" {
+		c.fail("the add button never opened the editor")
 		a.quit()
 		return
 	}
-	node := a.formByName(nodeWindowPrefix + "new")
-	if node == nil {
-		c.fail("the add-node window never appeared")
-		a.quit()
-		return
-	}
-	fields := probe(node, probes, `
+	c.ok("the add button opened the editor in the same window")
+	fields := probe(win, probes, `
 		(() => {
 			const shown = (id) => getComputedStyle(document.getElementById(id)).display !== "none";
+			const body = document.querySelector("#nodeSheet .sheet-body");
+			const r = document.querySelector("#nodeSheet .sheet").getBoundingClientRect();
 			return {shown: ["fSecret","fAuthority","fPath","fPadding"].filter(shown),
-					scroll: document.body.scrollHeight > document.body.clientHeight,
-					viewport: [document.body.clientWidth, document.body.clientHeight]};
+					title: document.getElementById("nodeSheetTitle").textContent,
+					scroll: body.scrollHeight > body.clientHeight,
+					sheet: [Math.round(r.width), Math.round(r.height)],
+					room: body.clientHeight};
 		})()`)
 	c.check(strings.Contains(fields, `"fSecret","fAuthority","fPath","fPadding"`),
 		"xhttp offers every optional field: %s", fields)
+	c.check(strings.Contains(fields, `"title":"Add node"`), "the sheet says what it is: %s", fields)
 	c.check(strings.Contains(fields, `"scroll":false`),
-		"the tallest form needs no scrollbar: %s", fields)
-	// PrintWindow on a window that has only just been shown comes out black:
-	// the page is loaded (the probes above answered) but the compositor has not
-	// drawn a frame yet, so give it one before asking for the pixels.
-	time.Sleep(1500 * time.Millisecond)
-	c.shot(node, "node-add")
+		"the tallest form needs no scrollbar at the minimum window size: %s", fields)
+	c.shot(win, "node-add")
 
 	// A protocol that hides a row has to take the buttons with it: the form
 	// flows from the top, so the spare room belongs under the actions, not in
 	// the middle of the fields.
-	trimmed := probe(node, probes, `
+	trimmed := probe(win, probes, `
 		(() => {
 			const sel = document.getElementById("fProtocol");
 			sel.value = "socks";
 			sel.dispatchEvent(new Event("change"));
 			const hidden = (id) => getComputedStyle(document.getElementById(id)).display === "none";
-			const actions = document.querySelector(".modal-actions").getBoundingClientRect();
+			const actions = document.querySelector("#nodeSheet .sheet-actions").getBoundingClientRect();
+			const body = document.querySelector("#nodeSheet .sheet-body");
 			const out = {hidden: ["fSecret","fAuthority","fPath","fPadding"].filter(hidden),
-					fits: actions.bottom <= document.body.clientHeight,
-					scroll: document.body.scrollHeight > document.body.clientHeight};
+					fits: actions.bottom <= window.innerHeight,
+					scroll: body.scrollHeight > body.clientHeight};
 			sel.value = "vless";
 			sel.dispatchEvent(new Event("change"));
 			return out;
 		})()`)
 	c.check(strings.Contains(trimmed, `"hidden":["fSecret"]`), "socks hides only the secret: %s", trimmed)
 	c.check(strings.Contains(trimmed, `"fits":true`) && strings.Contains(trimmed, `"scroll":false`),
-		"a shorter form keeps its buttons inside the window: %s", trimmed)
+		"a shorter form keeps its buttons in view: %s", trimmed)
 
 	// The validation is synchronous, so the click and the read are one pass.
-	refusal := probe(node, probes, `
+	refusal := probe(win, probes, `
 		(() => {
 			document.getElementById("modalSave").click();
 			return document.getElementById("fMsg").textContent;
 		})()`)
 	c.check(strings.Contains(refusal, "required"), "an empty form refuses in its own line: %q", refusal)
-	c.check(a.formByName(nodeWindowPrefix+"new") != nil, "a refused save leaves the editor open")
+	c.check(strings.Contains(probe(win, probes, `document.getElementById("nodeSheet").hidden`), "false"),
+		"a refused save leaves the editor open")
 
-	probe(node, probes, `
+	probe(win, probes, `
 		(() => {
 			const set = (id, v) => { document.getElementById(id).value = v; };
 			set("fName","gamma"); set("fServer","gamma.example.invalid"); set("fPort","2053");
@@ -297,64 +304,65 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 			document.getElementById("modalSave").click();
 			return "sent";
 		})()`)
-	c.check(waitClosed(a, nodeWindowPrefix+"new", 8*time.Second), "a good save closes the editor")
+	closed := probeUntil(win, probes, `document.getElementById("nodeSheet").hidden`,
+		func(s string) bool { return s == "true" }, 8*time.Second)
+	c.check(closed == "true", "a good save closes the editor")
 	c.check(len(stateFromFile(dir).Nodes) == 2, "the new node reached state.json: %d nodes", len(stateFromFile(dir).Nodes))
-	rows := probeUntil(a.mainWindow, probes, `document.querySelectorAll(".node-item").length`,
+	rows := probeUntil(win, probes, `document.querySelectorAll(".node-item").length`,
 		func(s string) bool { return s == "2" }, 8*time.Second)
 	c.check(rows == "2", "the closed editor told the list to reread: %q rows", rows)
 
-	// ---- the settings window ----
-	a.SettingsUI()
-	settings := a.formByName(settingsWindowName)
-	if settings == nil {
-		c.fail("the settings window never appeared")
-		a.quit()
-		return
-	}
-	// The page fills itself from two bindings, so the read has to wait for the
-	// draft to land rather than read the empty form the window starts with.
-	prefill := probeUntil(settings, probes, `
+	// ---- the settings sheet ----
+	probe(win, probes, `(() => { document.getElementById("gearBtn").click(); return "sent"; })()`)
+	// The sheet fills itself from two bindings, so the read has to wait for the
+	// draft to land rather than read the empty form it starts with.
+	prefill := probeUntil(win, probes, `
 		(() => ({
+			open: document.getElementById("settingsSheet").hidden === false,
 			ports: ["sHttpPort","sSocksPort"].map(id => document.getElementById(id).value).join("/"),
 			mode: document.getElementById("sMode").value,
 			tunRow: getComputedStyle(document.getElementById("sTunRow")).display,
 			loginRow: getComputedStyle(document.getElementById("sLoginRow")).display,
-			scroll: document.body.scrollHeight > document.body.clientHeight,
+			scroll: document.querySelector("#settingsSheet .sheet-body").scrollHeight >
+			        document.querySelector("#settingsSheet .sheet-body").clientHeight,
 		}))()`, func(s string) bool { return strings.Contains(s, `"ports":"11909/11908"`) }, 10*time.Second)
-	c.check(strings.Contains(prefill, `"ports":"11909/11908"`), "settings opens with the saved ports: %s", prefill)
+	c.check(strings.Contains(prefill, `"open":true`), "the gear opened the settings sheet in the same window")
 	c.check(strings.Contains(prefill, `"mode":"direct"`), "settings opens with the saved mode")
 	c.check(strings.Contains(prefill, `"tunRow":"flex"`), "the TUN row is offered where the platform supports it")
 	c.check(strings.Contains(prefill, `"loginRow":"flex"`), "the start-at-login row is offered on Windows")
 	c.check(strings.Contains(prefill, `"scroll":false`), "the settings form needs no scrollbar: %s", prefill)
-	c.shot(settings, "settings")
+	c.shot(win, "settings")
 
-	// Equal ports: the refusal belongs on this window's message line, and the
-	// window has to stay so the draft can be fixed.
-	probe(settings, probes, `
+	// Equal ports: the refusal belongs on this sheet's message line, and the
+	// sheet has to stay so the draft can be fixed.
+	probe(win, probes, `
 		(() => {
 			document.getElementById("sSocksPort").value = "11909";
 			document.getElementById("settingsOK").click();
 			return "sent";
 		})()`)
-	errText := probeUntil(settings, probes, `document.getElementById("sMsg").textContent`,
+	errText := probeUntil(win, probes, `document.getElementById("sMsg").textContent`,
 		func(s string) bool { return strings.Contains(s, "differ") }, 10*time.Second)
-	c.check(strings.Contains(errText, "differ"), "a bad draft is reported inside the settings window: %q", errText)
-	c.check(a.formByName(settingsWindowName) != nil, "a refused draft leaves the settings window open")
+	c.check(strings.Contains(errText, "differ"), "a bad draft is reported inside the settings sheet: %q", errText)
+	c.check(strings.Contains(probe(win, probes, `document.getElementById("settingsSheet").hidden`), "false"),
+		"a refused draft leaves the settings sheet open")
 	c.check(stateFromFile(dir).SocksPort == "11908", "a refused draft did not reach state.json")
 
-	// A good draft closes the window and reaches both the file and the bar.
-	probe(settings, probes, `
+	// A good draft closes the sheet and reaches both the file and the bar.
+	probe(win, probes, `
 		(() => {
 			document.getElementById("sHttpPort").value = "11911";
 			document.getElementById("sSocksPort").value = "11910";
 			document.getElementById("settingsOK").click();
 			return "sent";
 		})()`)
-	c.check(waitClosed(a, settingsWindowName, 15*time.Second), "a good draft closes the settings window")
+	closed = probeUntil(win, probes, `document.getElementById("settingsSheet").hidden`,
+		func(s string) bool { return s == "true" }, 15*time.Second)
+	c.check(closed == "true", "a good draft closes the settings sheet")
 	applied := stateFromFile(dir)
 	c.check(applied.HttpPort == "11911" && applied.SocksPort == "11910",
 		"OK applied the draft: %s/%s", applied.HttpPort, applied.SocksPort)
-	after := probeUntil(a.mainWindow, probes, `document.getElementById("roHttp").textContent`,
+	after := probeUntil(win, probes, `document.getElementById("roHttp").textContent`,
 		func(s string) bool { return s == "11911" }, 8*time.Second)
 	c.check(after == "11911", "the bar followed the applied setting: %q", after)
 
@@ -362,40 +370,41 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 	// A row is the only thing on the main page that writes, so both of its
 	// gestures are worth the pass: a click selects, a double click opens the
 	// editor for that one node.
-	probe(a.mainWindow, probes, `
+	probe(win, probes, `
 		(() => { document.querySelectorAll(".node-item")[1].click(); return "sent"; })()`)
-	active := probeUntil(a.mainWindow, probes,
+	active := probeUntil(win, probes,
 		`[...document.querySelectorAll(".node-item")].findIndex(el => el.classList.contains("active"))`,
 		func(s string) bool { return s == "1" }, 8*time.Second)
 	c.check(active == "1", "a click moves the highlight: row %s active", active)
 	c.check(stateFromFile(dir).Active == 1, "the click reached state.json: active=%d", stateFromFile(dir).Active)
 
-	probe(a.mainWindow, probes, `
+	win.SetSize(mainWindowWidth, mainWindowHeight)
+	time.Sleep(600 * time.Millisecond)
+	probe(win, probes, `
 		(() => { document.querySelectorAll(".node-item")[0].dispatchEvent(new MouseEvent("dblclick", {bubbles: true})); return "sent"; })()`)
-	deadline := time.Now().Add(8 * time.Second)
-	for a.formByName("node-0") == nil && time.Now().Before(deadline) {
-		time.Sleep(100 * time.Millisecond)
-	}
-	edit := a.formByName("node-0")
-	if edit == nil {
-		c.fail("a double click never opened the editor for that node")
-	} else {
-		saved := probeUntil(edit, probes, `
-			(() => ({name: document.getElementById("fName").value,
-					server: document.getElementById("fServer").value}))()`,
-			func(s string) bool { return strings.Contains(s, "alpha") }, 8*time.Second)
-		c.check(strings.Contains(saved, `"name":"alpha"`) && strings.Contains(saved, `"server":"alpha.example.invalid"`),
-			"the editor opens prefilled with the double-clicked node: %s", saved)
-		c.shot(edit, "node-edit")
-	}
+	saved := probeUntil(win, probes, `
+		(() => ({title: document.getElementById("nodeSheetTitle").textContent,
+				name: document.getElementById("fName").value,
+				server: document.getElementById("fServer").value}))()`,
+		func(s string) bool { return strings.Contains(s, "alpha") }, 8*time.Second)
+	c.check(strings.Contains(saved, `"title":"Edit node"`) && strings.Contains(saved, `"name":"alpha"`) &&
+		strings.Contains(saved, `"server":"alpha.example.invalid"`),
+		"a double click opens the editor prefilled with that node: %s", saved)
+	c.shot(win, "node-edit")
 
-	// Opening the gear twice must raise the one window, not stack a second.
-	a.SettingsUI()
-	a.SettingsUI()
-	time.Sleep(1200 * time.Millisecond)
-	c.shot(a.formByName(settingsWindowName), "settings-reopen")
+	// Esc is the third way out, and it must not half-close: the sheet goes and
+	// nothing is written.
+	before := stateFromFile(dir)
+	probe(win, probes, `
+		(() => { document.getElementById("fName").value = "typo";
+			document.dispatchEvent(new KeyboardEvent("keydown", {key: "Escape", bubbles: true}));
+			return "sent"; })()`)
+	esc := probeUntil(win, probes, `document.getElementById("nodeSheet").hidden`,
+		func(s string) bool { return s == "true" }, 5*time.Second)
+	c.check(esc == "true", "Esc dismisses the sheet")
+	c.check(len(stateFromFile(dir).Nodes) == len(before.Nodes), "a dismissed sheet wrote nothing")
 
-	c.shot(a.mainWindow, "main-final")
+	c.shot(win, "main-final")
 	a.quit()
 }
 
@@ -448,17 +457,6 @@ func render(v any) string {
 		return fmt.Sprintf("%v", v)
 	}
 	return string(b)
-}
-
-func waitClosed(a *App, name string, limit time.Duration) bool {
-	deadline := time.Now().Add(limit)
-	for time.Now().Before(deadline) {
-		if a.formByName(name) == nil {
-			return true
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	return false
 }
 
 func stateFromFile(dir string) GUIState {

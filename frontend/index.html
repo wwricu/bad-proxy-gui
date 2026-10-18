@@ -8,18 +8,32 @@
 </head>
 <body>
     <div id="app">
-        <!-- Node list: the whole window above the bar. Every setting lives in
-             the settings window the gear opens. -->
+        <!-- Node list: the whole window above the bar. -->
         <div class="left-panel">
             <div id="nodeList" class="node-list"></div>
         </div>
     </div>
 
-    <!-- Read-only status bar: what the engine is listening on, which mode and
-         routing preset it runs, then the two actions it belongs to. Adding a
-         node lives here beside the settings gear so the window has one action
-         corner instead of one at the bottom of the list and one below it. -->
+    <!-- Three zones, left to right: what you can do, what is running, what just
+         happened. The actions are first and fixed-width, so the one element
+         whose width changes (the status line) sits at the right edge and can
+         grow and shrink without moving anything. -->
     <div class="status-bar">
+        <div class="bar-actions">
+            <button id="addNodeBtn" class="icon-btn" title="Add a node" aria-label="Add a node">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                    <path d="M12 5v14M5 12h14"/>
+                </svg>
+            </button>
+            <button id="gearBtn" class="icon-btn" title="Settings" aria-label="Settings">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+            </button>
+        </div>
         <div class="readout">
             <label>HTTP</label><span id="roHttp"></span>
         </div>
@@ -33,15 +47,108 @@
             <label>ROUTING</label><span id="roRouting"></span>
         </div>
         <span id="statusText" class="status"></span>
-        <div class="bar-actions">
-            <button id="addNodeBtn" class="bar-btn" title="Add a node">+ Node</button>
-            <button id="gearBtn" class="gear-btn" title="Settings">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <circle cx="12" cy="12" r="3"/>
-                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-                </svg>
-            </button>
+    </div>
+
+    <!-- The node editor and the settings sheet are sheets over this window, not
+         windows of their own: a form that floats in a second window never looks
+         like part of the app, and the two of them cannot be open at once
+         anyway, since they write the same state. -->
+    <div class="overlay" id="nodeSheet" hidden>
+        <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="nodeSheetTitle">
+            <div class="sheet-head">
+                <h2 id="nodeSheetTitle">Add node</h2>
+                <button class="icon-btn sheet-x" id="nodeCloseTop" title="Close" aria-label="Close">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                         stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                        <path d="M5 5l14 14M19 5L5 19"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="sheet-body">
+                <div class="form-grid">
+                    <label>Name</label><input type="text" id="fName">
+                    <label>Protocol</label>
+                    <select id="fProtocol">
+                        <option value="vless">vless</option>
+                        <option value="btp">btp</option>
+                        <option value="trojan">trojan</option>
+                        <option value="socks">socks</option>
+                    </select>
+                    <label>Address</label><input type="text" id="fServer">
+                    <label>Port</label><input type="text" id="fPort">
+                    <label id="lSecret">Secret</label><input type="text" id="fSecret">
+                    <label>Transport</label>
+                    <select id="fTransport">
+                        <option value="tls">tls</option>
+                        <option value="xhttp">xhttp</option>
+                    </select>
+                    <label id="lAuthority">Domain (SNI/Host)</label><input type="text" id="fAuthority">
+                    <label id="lPath">Path</label><input type="text" id="fPath">
+                    <label id="lPadding">Padding range</label><input type="text" id="fPadding">
+                </div>
+                <div id="fMsg" class="form-msg" aria-live="polite"></div>
+            </div>
+            <div class="sheet-actions">
+                <button id="modalCancel" class="btn-secondary">Cancel</button>
+                <button id="modalSave" class="btn-primary">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="overlay" id="settingsSheet" hidden>
+        <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="settingsSheetTitle">
+            <div class="sheet-head">
+                <h2 id="settingsSheetTitle">Settings</h2>
+                <button class="icon-btn sheet-x" id="settingsCloseTop" title="Close" aria-label="Close">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                         stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                        <path d="M5 5l14 14M19 5L5 19"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="sheet-body">
+                <div class="form-grid">
+                    <label>HTTP port</label><input type="text" id="sHttpPort">
+                    <label>SOCKS port</label><input type="text" id="sSocksPort">
+                    <label>Mode</label>
+                    <select id="sMode">
+                        <option value="direct">Direct</option>
+                        <option value="proxy">Proxy</option>
+                        <option value="system">System proxy</option>
+                    </select>
+                    <label>Routing</label>
+                    <select id="sRouting">
+                        <option value="global">Global</option>
+                        <option value="cn-whitelist">Bypass CN</option>
+                        <option value="gfw-blacklist">Bypass GFW</option>
+                    </select>
+                </div>
+                <div class="check-grid">
+                    <div class="checkbox-row" id="sTunRow">
+                        <input type="checkbox" id="sTun">
+                        <label for="sTun">TUN mode</label>
+                    </div>
+                    <div class="checkbox-row">
+                        <input type="checkbox" id="sLAN">
+                        <label for="sLAN">Allow LAN access</label>
+                    </div>
+                    <div class="checkbox-row" id="sLoginRow" style="display:none;">
+                        <input type="checkbox" id="sLogin">
+                        <label for="sLogin">Start at login</label>
+                    </div>
+                    <div class="checkbox-row" id="sTrayRow" style="display:none;">
+                        <input type="checkbox" id="sTray">
+                        <label for="sTray">Hide tray icon (after restart)</label>
+                    </div>
+                </div>
+                <!-- Where an OK that did not take effect says why, beside the box
+                     that caused it. -->
+                <div id="sMsg" class="form-msg" aria-live="polite"></div>
+            </div>
+            <div class="sheet-actions">
+                <button id="settingsCancel" class="btn-secondary">Cancel</button>
+                <button id="settingsOK" class="btn-primary">OK</button>
+            </div>
         </div>
     </div>
 
