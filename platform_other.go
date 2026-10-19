@@ -19,3 +19,10 @@ const trayHasMenu = false
 // windowFrameHeight is unmeasured where there is no self-test run to measure it
 // in, and the form windows have never been shipped here.
 const windowFrameHeight = 0
+
+// The form heights are the macOS numbers: nothing has measured them here, and
+// like the frame above, they are only what lets the window code compile.
+const (
+	nodeFormHeight     = 462
+	settingsFormHeight = 302
+)

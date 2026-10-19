@@ -22,3 +22,15 @@ const trayHasMenu = false
 // own height and the title bar is extra on top of it. Measured in the self-test
 // run, which reads 452 px of page out of a window of 452 and a frame of 483.
 const windowFrameHeight = 0
+
+// The two forms' client heights, measured on this platform.
+//
+// They are not the Windows numbers: a text field and a popup are drawn by the
+// operating system, and AppKit draws them shorter than Win32 does. The settings
+// form is 39 px of content shorter here than on Windows, which is why a height
+// shared between the two platforms leaves one of them either scrolling or
+// holding a band of empty window under its own buttons.
+const (
+	nodeFormHeight     = 462
+	settingsFormHeight = 302
+)

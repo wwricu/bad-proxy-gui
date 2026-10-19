@@ -22,3 +22,15 @@ const trayHasMenu = true
 // the number handed to it. Measured in the self-test run, which also charges
 // 13 px of width to the frame.
 const windowFrameHeight = 36
+
+// The two forms' client heights, measured on this platform.
+//
+// The 6 px over the measured content is not slack to look good in: the frame is
+// rounded from physical pixels, so a 100%-scaled display loses three more
+// client pixels than a 175% one, and the editor's nine fields fit exactly at
+// the higher scale and scroll at the lower. The self-test run on the CI
+// runner - 100% - is what found it.
+const (
+	nodeFormHeight     = 468
+	settingsFormHeight = 347
+)
