@@ -185,12 +185,23 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 
 	// ---- the main window ----
 	c.shot(win, "main")
-	readouts := probe(win, probes, `
+	readouts := probeUntil(win, probes, `
 		["roHttp","roSocks","roMode","roRouting"].map(id => {
 			const el = document.getElementById(id);
 			return id + "=" + el.tagName + ":" + el.textContent;
 		}).join(" ") + " | forms=" +
-		(document.getElementById("nodeSheet") === null && document.getElementById("settingsSheet") === null)`)
+		(document.getElementById("nodeSheet") === null && document.getElementById("settingsSheet") === null)`,
+		// The bar is filled by the first state read, which lands whenever the
+		// page's script has run and the binding has answered. On this machine
+		// that is inside the sleep above; on a CI runner the cold start is
+		// slower and the same read once came back with four empty spans. Polling
+		// for the settled bar is the difference between a test and a race.
+		func(s string) bool {
+			return strings.Contains(s, "roHttp=SPAN:11909") &&
+				strings.Contains(s, "roSocks=SPAN:11908") &&
+				strings.Contains(s, "roMode=SPAN:Direct") &&
+				strings.Contains(s, "forms=true")
+		}, 20*time.Second)
 	c.check(strings.Contains(readouts, "roHttp=SPAN:11909"), "the bar shows the HTTP port as text: %q", readouts)
 	c.check(strings.Contains(readouts, "roSocks=SPAN:11908"), "the bar shows the SOCKS port as text")
 	c.check(strings.Contains(readouts, "roMode=SPAN:Direct"), "the bar names the mode in words")
@@ -270,7 +281,7 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 	// The form is the main window's, not a stranger on the desktop: the window
 	// manager is what keeps it on top, so check the relationship rather than
 	// trusting that it looks right in a screenshot.
-	c.check(ownerOf(node) == hwndOf(a.mainWindow),
+	c.check(waitOwner(node, hwndOf(a.mainWindow), 5*time.Second) == hwndOf(a.mainWindow),
 		"the editor is owned by the main window: main=%x node=%x owner=%x",
 		hwndOf(a.mainWindow), hwndOf(node), ownerOf(node))
 	c.check(aboveInStack(node, win), "the editor starts out above the main window")
@@ -721,6 +732,21 @@ func waitForm(a *App, name string, limit time.Duration) application.Window {
 		time.Sleep(100 * time.Millisecond)
 	}
 	return nil
+}
+
+// waitOwner polls until w reports want as its owner. keepAbove runs after the
+// window is created and filed, so a form is briefly a stranger on the desktop;
+// reading the owner once turns that moment into a failed assertion on a machine
+// that starts windows more slowly than this one does.
+func waitOwner(w application.Window, want uintptr, limit time.Duration) uintptr {
+	deadline := time.Now().Add(limit)
+	for time.Now().Before(deadline) {
+		if owner := ownerOf(w); owner == want {
+			return owner
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return ownerOf(w)
 }
 
 // waitClosed polls the other way: a form window finishes its work by closing,
