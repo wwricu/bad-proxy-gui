@@ -19,14 +19,22 @@ const (
 	settingsWindowName = "settings"
 	nodeWindowPrefix   = "node-"
 
-	// Both numbers are the form's own height plus the window frame, taken from
-	// the self-test run rather than guessed: on Windows the frame costs 13 px of
-	// width and 36 px of height, and the two forms need 416 and 312 px of client
-	// height - the self-test fails if either then shows a band of empty window
-	// above its own buttons.
-	formWindowWidth      = 460
-	settingsWindowHeight = 348
-	nodeWindowHeight     = 452
+	formWindowWidth = 460
+
+	// What each form's page needs, in client height: the tallest editor (xhttp,
+	// every optional field on offer) and the settings form take 416 and 312 px.
+	// The self-tests measure the result rather than trust the number - a window
+	// too short shows a scrollbar, one too tall shows a band of empty window
+	// above its own buttons, and both fail the run.
+	//
+	// They are the client height, not the window height, because the frame Wails
+	// puts around the webview is not the same question on each platform: see
+	// windowFrameHeight.
+	settingsFormHeight = 312
+	nodeFormHeight     = 416
+
+	settingsWindowHeight = settingsFormHeight + windowFrameHeight
+	nodeWindowHeight     = nodeFormHeight + windowFrameHeight
 )
 
 // openFormWindow shows one form window, or refuses to. There is never a second

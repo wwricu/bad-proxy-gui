@@ -280,6 +280,16 @@ body.form-page {
     border-top: 1px solid #e7eaef;
 }
 
+/* The card's body takes the room it needs and no more, so the buttons sit under
+   the last field and any spare room falls below them. Letting the body grow
+   would spend that room as a band between the fields and their buttons, and
+   there is always some: a form with a row hidden, or a window whose frame the
+   platform does not charge for. Still shrinkable, so a window shorter than the
+   form scrolls instead of clipping. */
+.form-window .sheet-body {
+    flex: 0 1 auto;
+}
+
 .form-grid {
     display: grid;
     grid-template-columns: 110px 1fr;

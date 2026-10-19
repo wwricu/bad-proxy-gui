@@ -16,3 +16,9 @@ const trayTitle = "Bad Proxy"
 
 // trayHasMenu is true on Windows: the right click pops a menu carrying Quit.
 const trayHasMenu = true
+
+// windowFrameHeight is what the caption and border cost: Wails' window Height
+// is the whole window here, so a form's client height is this much less than
+// the number handed to it. Measured in the self-test run, which also charges
+// 13 px of width to the frame.
+const windowFrameHeight = 36
