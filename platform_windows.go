@@ -23,6 +23,12 @@ const trayHasMenu = true
 // 13 px of width to the frame.
 const windowFrameHeight = 36
 
+// resizeFrameHeight is the same frame again, because resizing a window uses the
+// whole-window convention that creating one does. It is only a starting guess:
+// the frame is 36 px on a display at 175% scaling and 39 at 100%, and the page
+// measures the difference and asks for the rest.
+const resizeFrameHeight = windowFrameHeight
+
 // The two forms' client heights: what each window opens at, before the page has
 // measured itself and asked for the height it actually needs.
 //

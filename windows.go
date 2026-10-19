@@ -125,17 +125,24 @@ func (a *App) anyFormWindow() application.Window {
 // just measured.
 //
 // The split is deliberate: the page knows how tall its own fields are, and only
-// this side knows what the frame costs on this platform, so the number crossing
-// the boundary is a client height and the frame is added here - the same sum
-// openFormWindow starts from. Without it, hiding a row leaves the window as tall
-// as the tallest form and the buttons drift up off the bottom edge, stranding a
-// band of empty window under them.
+// this side knows which convention a resize uses on this platform. The number
+// crossing the boundary is a client height and resizeFrameHeight is added here.
+// Without it, hiding a row leaves the window as tall as the tallest form and the
+// buttons drift up off the bottom edge, stranding a band of empty window under
+// them.
+//
+// The constant is a starting point rather than an answer. It is not the number
+// openFormWindow starts from, because a resize is not a creation: macOS hands the
+// creation height to the content rect and the resize height to the frame, and
+// Windows' frame is 3 px taller at 100% scaling than at 175%. The page reads back
+// what it got and asks again for the difference, so what is wrong here costs one
+// more resize and never a window that does not fit its form.
 func (a *App) FitFormWindow(clientHeight int) {
 	form := a.anyFormWindow()
 	if form == nil || clientHeight <= 0 {
 		return
 	}
-	form.SetSize(formWindowWidth, clientHeight+windowFrameHeight)
+	form.SetSize(formWindowWidth, clientHeight+resizeFrameHeight)
 }
 
 // hideFormWindow and showFormWindow move the form with the list it belongs to.

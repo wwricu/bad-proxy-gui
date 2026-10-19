@@ -322,10 +322,11 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 		return `(() => { const s = document.getElementById("fTransport"); s.value = "` + v +
 			`"; s.dispatchEvent(new Event("change")); return "sent"; })()`
 	}
-	// The fit is a round trip through a binding, so read until the window has
-	// caught up with the page rather than trusting the first answer.
+	// The fit is a round trip through a binding, and the window may have to be
+	// asked twice before it lands on the height the page wants, so read until it
+	// has caught up with the page rather than trusting the first answer.
 	fields := probeUntil(node, probes, formShape, func(s string) bool {
-		return strings.Contains(s, `"n":4`) && belowOf(s) >= 0 && belowOf(s) <= 12
+		return strings.Contains(s, `"n":4`) && fitted(s)
 	}, 8*time.Second)
 	c.check(strings.Contains(fields, `"rows":["fSecret","fAuthority","fPath","fPadding"]`),
 		"xhttp offers every optional field: %s", fields)
@@ -378,7 +379,7 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 	// see coming, because the form is only tallest when it first opens.
 	probe(node, probes, setTransport("tls"))
 	shrunk := probeUntil(node, probes, formShape, func(s string) bool {
-		return strings.Contains(s, `"n":2`) && belowOf(s) >= 0 && belowOf(s) <= 12
+		return strings.Contains(s, `"n":2`) && settled(s)
 	}, 8*time.Second)
 	c.check(strings.Contains(shrunk, `"scroll":false`),
 		"the short form needs no scrollbar: %s", shrunk)
@@ -500,6 +501,7 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 			loginRow: getComputedStyle(document.getElementById("sLoginRow")).display,
 			scroll: document.querySelector(".sheet-body").scrollHeight >
 			        document.querySelector(".sheet-body").clientHeight,
+			gutter: (b => b.offsetWidth - b.clientWidth)(document.querySelector(".sheet-body")),
 			gap: (() => {
 				const last = Math.max(...[...document.querySelectorAll(".sheet-body *")]
 					.map((el) => el.getBoundingClientRect().bottom).filter((y) => y > 0));
@@ -509,11 +511,12 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 				document.querySelector(".sheet-actions").getBoundingClientRect().bottom),
 			inner: [window.innerWidth, window.innerHeight],
 		}))()`, func(s string) bool {
-		return strings.Contains(s, `"ports":"11909/11908"`) && belowOf(s) >= 0 && belowOf(s) <= 12
+		return strings.Contains(s, `"ports":"11909/11908"`) && fitted(s)
 	}, 10*time.Second)
 	c.check(strings.Contains(prefill, `"mode":"direct"`), "settings opens with the saved mode")
 	c.check(strings.Contains(prefill, `"loginRow":"flex"`), "the start-at-login row is offered on Windows")
 	c.check(strings.Contains(prefill, `"scroll":false`), "the settings form needs no scrollbar: %s", prefill)
+	c.check(gutterOf(prefill) == 0, "the fitted settings window keeps no scrollbar gutter: %s", prefill)
 	c.check(gapOf(prefill) <= 32, "no dead band above the settings buttons: %s", prefill)
 	c.check(belowOf(prefill) >= 0 && belowOf(prefill) <= 12,
 		"the settings buttons sit at the bottom edge: %s", prefill)
@@ -838,6 +841,23 @@ func gutterOf(probeJSON string) int {
 	}
 	_ = json.Unmarshal([]byte(probeJSON), &out)
 	return out.Gutter
+}
+
+// settled is a form page whose window has finished answering: the buttons are at
+// the bottom edge, nothing is clipped, and no scrollbar has been given the room
+// the fields wanted. The fit is a loop now, so a single read can land in the
+// middle of it - and on macOS in the middle of an animation.
+func settled(probeJSON string) bool {
+	return belowOf(probeJSON) >= 0 && belowOf(probeJSON) <= 12 &&
+		gutterOf(probeJSON) == 0 && !strings.Contains(probeJSON, `"scroll":true`)
+}
+
+// fitted is settled plus the mark the fit leaves behind: the window asked for
+// exactly the form and its two pixels of rounding, so the buttons sit two pixels
+// off the bottom edge. The first read of a window needs that, or it can be told
+// the window is the wrong height by the height it opened at.
+func fitted(probeJSON string) bool {
+	return settled(probeJSON) && belowOf(probeJSON) <= 4
 }
 
 // waitForm polls until a window with the given name exists and has a native

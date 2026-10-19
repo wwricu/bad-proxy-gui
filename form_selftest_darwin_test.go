@@ -214,7 +214,7 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 	// If the process dies here, the crash is in the second window's asset load
 	// rather than in its creation.
 	fields := probeUntil(node, probes, formGeometry, func(s string) bool {
-		return strings.Contains(s, "xhttp") && belowOf(s) >= 0 && belowOf(s) <= 12
+		return strings.Contains(s, "xhttp") && fitted(s)
 	}, 30*time.Second)
 	c.check(strings.Contains(fields, `"fSecret","fAuthority","fPath","fPadding"`),
 		"xhttp offers every optional field: %s", fields)
@@ -292,7 +292,7 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 	c.ok("the gear opened the settings window")
 	prefill := probeUntil(settings, probes, settingsGeometry,
 		func(s string) bool {
-			return strings.Contains(s, `"ports":"11909/11908"`) && belowOf(s) >= 0 && belowOf(s) <= 12
+			return strings.Contains(s, `"ports":"11909/11908"`) && fitted(s)
 		}, 30*time.Second)
 	c.check(strings.Contains(prefill, `"ports":"11909/11908"`),
 		"the settings form filled itself from the draft: %s", prefill)
@@ -360,6 +360,7 @@ const formGeometry = `
 			transport: document.getElementById("fTransport") && document.getElementById("fTransport").value,
 			shown, n: shown.length,
 			scroll: body.scrollHeight > body.clientHeight,
+			gutter: body.offsetWidth - body.clientWidth,
 			gap: Math.round(document.querySelector(".sheet-actions").getBoundingClientRect().top - last),
 			below: Math.round(window.innerHeight -
 				document.querySelector(".sheet-actions").getBoundingClientRect().bottom),
@@ -375,6 +376,7 @@ const settingsGeometry = `
 			ports: ["sHttpPort","sSocksPort"].map(id => document.getElementById(id).value).join("/"),
 			loginRow: getComputedStyle(document.getElementById("sLoginRow")).display,
 			scroll: body.scrollHeight > body.clientHeight,
+			gutter: body.offsetWidth - body.clientWidth,
 			gap: Math.round(document.querySelector(".sheet-actions").getBoundingClientRect().top - last),
 			below: Math.round(window.innerHeight -
 				document.querySelector(".sheet-actions").getBoundingClientRect().bottom),
@@ -406,6 +408,27 @@ func heightOf(probeJSON string) int {
 	}
 	_ = json.Unmarshal([]byte(probeJSON), &out)
 	return out.Inner[1]
+}
+
+// settled is a form page whose window has finished answering: the buttons are at
+// the bottom edge and nothing is clipped. The fit is a loop and AppKit animates
+// the resize it asks for, so one read can land mid-flight.
+func settled(probeJSON string) bool {
+	var out struct {
+		Gutter int `json:"gutter"`
+	}
+	_ = json.Unmarshal([]byte(probeJSON), &out)
+	return belowOf(probeJSON) >= 0 && belowOf(probeJSON) <= 12 &&
+		out.Gutter == 0 && !strings.Contains(probeJSON, `"scroll":true`)
+}
+
+// fitted is settled plus the mark the fit leaves behind: the window asked for
+// exactly the form and its two pixels of rounding, so the buttons sit two pixels
+// off the bottom edge. A window still at the height it was created at is further
+// from that, and the first read of a form has to wait for the fit rather than
+// compare the editor's opening size with its own.
+func fitted(probeJSON string) bool {
+	return settled(probeJSON) && belowOf(probeJSON) <= 4
 }
 
 var probeID atomic.Int64
