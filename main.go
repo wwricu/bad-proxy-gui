@@ -45,8 +45,8 @@ const (
 	// formWindowWidth anyway, so the list window is never narrower than a dialog
 	// that opens out of it.
 	mainWindowMinW    = 488
-	mainWindowRowH    = 63  // one node row: 13+14+8+14+13+1 px
-	mainWindowListH   = 4   // the gap .node-list keeps from the window's top edge
+	mainWindowRowH    = 63 // one node row: 13+14+8+14+13+1 px
+	mainWindowListH   = 4  // the gap .node-list keeps from the window's top edge
 	mainWindowBarH    = 36
 	mainWindowChromeH = 44 // caption and border: 31 on mac, 39 on Windows at 100%
 	mainWindowMinRows = 4  // the floor is this many node rows tall

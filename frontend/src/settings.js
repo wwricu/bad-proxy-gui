@@ -18,7 +18,9 @@ function setFormMsg(text, busy) {
 }
 
 async function init() {
-    const [draft, platform] = await Promise.all([API().SettingsDraft(), API().GetPlatformInfo()]);
+    const [draft, platform, rulesVersion] = await Promise.all([
+        API().SettingsDraft(), API().GetPlatformInfo(), API().RulesVersion(),
+    ]);
 
     document.getElementById('sHttpPort').value = draft.http_port || '10809';
     document.getElementById('sSocksPort').value = draft.socks_port || '10808';
@@ -36,6 +38,15 @@ async function init() {
         document.querySelector('#sMode option[value="system"]').remove();
     }
 
+    // Which build is already installed, so a click that would only fetch the
+    // same file again is not a blind one. An app that has never replaced its
+    // bundled copy has no recorded date and says nothing.
+    if (rulesVersion) {
+        const m = document.getElementById('sRulesMsg');
+        m.classList.add('busy');
+        m.textContent = 'Installed rules: ' + rulesVersion;
+    }
+
     document.getElementById('sHttpPort').focus();
     // Which rows the OS offers is only known after the platform read, so this is
     // the first moment the page knows its own height.
@@ -44,15 +55,16 @@ async function init() {
 
 document.getElementById('settingsCancel').onclick = () => Window.Close();
 
-// Updating rules downloads a new file and restarts the engine, which is not
-// instant, so the button is disabled for the duration and its outcome is read
-// inline instead of closing the window.
+// Updating rules first asks the server whether there is anything new, and only
+// downloads and restarts when there is. Neither step is instant, so the button
+// is disabled for the duration and the outcome is read inline instead of
+// closing the window.
 document.getElementById('sUpdateRules').onclick = async () => {
     const btn = document.getElementById('sUpdateRules');
     const msg = document.getElementById('sRulesMsg');
     btn.disabled = true;
     msg.classList.add('busy');
-    msg.textContent = 'Downloading...';
+    msg.textContent = 'Updating...';
     try {
         msg.classList.remove('busy');
         msg.textContent = await API().UpdateRules();

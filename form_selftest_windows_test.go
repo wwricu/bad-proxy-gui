@@ -552,6 +552,21 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 			})(),
 			below: Math.round(window.innerHeight -
 				document.querySelector(".sheet-actions").getBoundingClientRect().bottom),
+			// The version the window opens with sits in the same slot the updater
+			// reports into. Either nothing - an app that has never replaced its
+			// bundled dataset has no build it can name - or the day it claims,
+			// said quietly so it reads as a state and not a result.
+			version: (() => {
+				const m = document.getElementById("sRulesMsg");
+				const text = m.textContent;
+				if (/^\s*$/.test(text)) return { shown: text, stated: true };
+				return {
+					shown: text,
+					stated: text.startsWith("Installed rules: ") &&
+						/^\d{4}-\d{2}-\d{2}$/.test(text.slice("Installed rules: ".length)) &&
+						m.classList.contains("busy"),
+				};
+			})(),
 			// The updater is in the button row and not in the form: it belongs to
 			// the window. It holds the row's left edge as firmly as OK holds the
 			// right, which is the one promise that survives the padding changing.
@@ -563,6 +578,7 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 			updater: (() => {
 				const b = document.getElementById("sUpdateRules");
 				const m = document.getElementById("sRulesMsg");
+				const had = m.textContent;
 				m.textContent = "download was only 512 bytes, too small to be the " +
 					"rules dataset - keeping the current one";
 				const row = document.querySelector(".sheet-actions");
@@ -577,7 +593,7 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 					rightGap: Math.round(rr.right - ok.right),
 					beside: mr.width > 0 && mr.left >= br.right,
 					clear: Math.round(cr.left - mr.right)};
-				m.textContent = "";
+				m.textContent = had;
 				return out;
 			})(),
 			inner: [window.innerWidth, window.innerHeight],
@@ -586,6 +602,10 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 	}, 10*time.Second)
 	c.check(strings.Contains(prefill, `"mode":"direct"`), "settings opens with the saved mode")
 	var row struct {
+		Version struct {
+			Shown  string `json:"shown"`
+			Stated bool   `json:"stated"`
+		} `json:"version"`
 		Updater struct {
 			Same     bool `json:"same"`
 			First    bool `json:"first"`
@@ -596,6 +616,9 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 		} `json:"updater"`
 	}
 	c.check(json.Unmarshal([]byte(prefill), &row) == nil, "the settings page reports its button row: %s", prefill)
+	c.check(row.Version.Stated,
+		"the settings window opens naming its rules build as a day, or naming nothing: %q",
+		row.Version.Shown)
 	c.check(row.Updater.Same && row.Updater.First,
 		"the rules updater shares the button row, ahead of Cancel: %s", prefill)
 	c.check(row.Updater.LeftGap == row.Updater.RightGap && row.Updater.LeftGap > 0,
