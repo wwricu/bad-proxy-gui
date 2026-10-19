@@ -43,11 +43,11 @@ const (
 	// live in, and having the dialog that pops out of it be wider than it is
 	// reads as a mistake. The bar itself only needs 298 of these 460.
 	mainWindowMinW    = formWindowWidth
-	mainWindowRowH    = 63  // one node row: 13+14+8+14+13+1 px
-	mainWindowListH   = 4   // the gap .node-list keeps from the window's top edge
-	mainWindowBarH    = 44  // two bar lines: the 11 px label over its 12.5 px value
-	mainWindowChromeH = 44  // caption and border: 31 on mac, 39 on Windows at 100%
-	mainWindowMinRows = 4   // the floor is this many node rows tall
+	mainWindowRowH    = 63 // one node row: 13+14+8+14+13+1 px
+	mainWindowListH   = 4  // the gap .node-list keeps from the window's top edge
+	mainWindowBarH    = 44 // two bar lines: the 11 px label over its 12.5 px value
+	mainWindowChromeH = 44 // caption and border: 31 on mac, 39 on Windows at 100%
+	mainWindowMinRows = 4  // the floor is this many node rows tall
 )
 
 // mainWindowSize returns the initial width/height and the minimums. Width is
