@@ -44,7 +44,7 @@ async function init() {
     if (rulesVersion) {
         const m = document.getElementById('sRulesMsg');
         m.classList.add('busy');
-        m.textContent = 'Installed rules: ' + rulesVersion;
+        m.textContent = 'Installed: ' + rulesVersion;
     }
 
     document.getElementById('sHttpPort').focus();

@@ -51,9 +51,9 @@ func (a *App) UpdateRules() (string, error) {
 	day := rulesDay(modified)
 	if err == nil && fileExists(target) && sameRulesBuild(dir, etag, modified) {
 		if day == "" {
-			return "Already up to date.", nil
+			return "Up to date.", nil
 		}
-		return fmt.Sprintf("Already up to date (%s).", day), nil
+		return "Up to date: " + day, nil
 	}
 	// A failed check is not a reason to refuse the update: the GET below is the
 	// same endpoint and answers for itself.
@@ -71,9 +71,9 @@ func (a *App) UpdateRules() (string, error) {
 		return "", err
 	}
 	if day == "" {
-		return fmt.Sprintf("Rules updated (%d KB).", n/1024), nil
+		return fmt.Sprintf("Updated (%d KB).", n/1024), nil
 	}
-	return fmt.Sprintf("Rules updated to %s (%d KB).", day, n/1024), nil
+	return "Updated to: " + day, nil
 }
 
 // sameRulesBuild reports whether the upstream build the server just described

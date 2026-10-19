@@ -555,15 +555,19 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 			// The version the window opens with sits in the same slot the updater
 			// reports into. Either nothing - an app that has never replaced its
 			// bundled dataset has no build it can name - or the day it claims,
-			// said quietly so it reads as a state and not a result.
+			// said quietly so it reads as a state and not a result, and on one
+			// line: the row is the window's bottom edge, so a second line is a
+			// taller window every time the page is opened.
 			version: (() => {
 				const m = document.getElementById("sRulesMsg");
 				const text = m.textContent;
-				if (/^\s*$/.test(text)) return { shown: text, stated: true };
+				if (/^\s*$/.test(text)) return { shown: text, lines: 0, stated: true };
 				return {
 					shown: text,
-					stated: text.startsWith("Installed rules: ") &&
-						/^\d{4}-\d{2}-\d{2}$/.test(text.slice("Installed rules: ".length)) &&
+					lines: Math.round(m.getBoundingClientRect().height /
+						parseFloat(getComputedStyle(m).lineHeight)),
+					stated: text.startsWith("Installed: ") &&
+						/^\d{4}-\d{2}-\d{2}$/.test(text.slice("Installed: ".length)) &&
 						m.classList.contains("busy"),
 				};
 			})(),
@@ -604,6 +608,7 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 	var row struct {
 		Version struct {
 			Shown  string `json:"shown"`
+			Lines  int    `json:"lines"`
 			Stated bool   `json:"stated"`
 		} `json:"version"`
 		Updater struct {
@@ -619,6 +624,9 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 	c.check(row.Version.Stated,
 		"the settings window opens naming its rules build as a day, or naming nothing: %q",
 		row.Version.Shown)
+	c.check(row.Version.Lines <= 1,
+		"the version the window opens with costs the row no extra line: %d lines, %q",
+		row.Version.Lines, row.Version.Shown)
 	c.check(row.Updater.Same && row.Updater.First,
 		"the rules updater shares the button row, ahead of Cancel: %s", prefill)
 	c.check(row.Updater.LeftGap == row.Updater.RightGap && row.Updater.LeftGap > 0,
@@ -636,6 +644,37 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 	fmt.Printf("  form   settings: %s\n", prefill)
 	time.Sleep(1200 * time.Millisecond)
 	c.shot(settings, "settings")
+
+	// ---- the rules updater, for real ----
+	// Everything above measures the row the updater reports into; this is the
+	// updater itself, against the endpoint it actually talks to. The first click
+	// may legitimately either fetch a new build or find that the app already
+	// holds it, so what is asserted is not which of the two happened but that it
+	// ended in a result rather than a refusal, and that the app then knows - from
+	// the server's own answer, not from a guess - that a second click has nothing
+	// left to do. That second click is the whole reason the check exists: a no-op
+	// update must not cost a restart, and every live connection with it.
+	first, firstLines := clickUpdater(settings, probes, 3*time.Minute)
+	c.check(strings.HasPrefix(first, "Updated") || strings.HasPrefix(first, "Up to date"),
+		"the rules updater finished with a result, not a refusal: %q", first)
+	c.shot(settings, "rules-updated")
+
+	dataDir, dirErr := appConfigDir()
+	c.check(dirErr == nil, "the updater's own data dir is findable: %v", dirErr)
+	if dirErr == nil {
+		recorded := rulesDay(storedRulesDate(dataDir))
+		c.check(recorded != "" && strings.Contains(first, recorded),
+			"the build the app recorded is the one it reported: %q said %q", recorded, first)
+		second, secondLines := clickUpdater(settings, probes, time.Minute)
+		c.check(strings.HasPrefix(second, "Up to date") && strings.Contains(second, recorded),
+			"a second click finds nothing new to do: %q", second)
+		// The row is the window's bottom edge and its height is what the window
+		// is sized to, so a report that wraps is a window that visibly grows on
+		// every click. One line is the budget, and the day has to fit inside it.
+		c.check(firstLines == 1 && secondLines == 1,
+			"both reports fit the row without growing the window: %d and %d lines", firstLines, secondLines)
+		c.shot(settings, "rules-current")
+	}
 
 	// Equal ports: the refusal belongs on this window's message line, and the
 	// window has to stay so the draft can be fixed.
@@ -898,6 +937,36 @@ func probeUntil(w application.Window, probes chan map[string]any, expr string, w
 			return last
 		}
 	}
+}
+
+// clickUpdater presses the settings window's Update rules button and brings back
+// what it ended up reporting, and how many lines it took to say it. The line is
+// emptied first because the button writes its progress into the same place it
+// writes its result, so a previous result still sitting there would be read as
+// the new one, and the answer waits for the fit loop because a result is also
+// the moment the window changes height.
+func clickUpdater(w application.Window, probes chan map[string]any, limit time.Duration) (string, int) {
+	probe(w, probes, `(() => {
+		const m = document.getElementById("sRulesMsg");
+		m.textContent = "";
+		document.getElementById("sUpdateRules").click();
+		return "sent";
+	})()`)
+	settled := probeUntil(w, probes, `(() => {
+		const m = document.getElementById("sRulesMsg");
+		const t = m.textContent;
+		if (t === "" || t === "Updating..." || !window.selffit.done) return "";
+		return JSON.stringify({text: t, lines: Math.round(m.getBoundingClientRect().height /
+			parseFloat(getComputedStyle(m).lineHeight))});
+	})()`, func(s string) bool { return s != "" }, limit)
+	var out struct {
+		Text  string `json:"text"`
+		Lines int    `json:"lines"`
+	}
+	if json.Unmarshal([]byte(settled), &out) != nil {
+		return settled, 0
+	}
+	return out.Text, out.Lines
 }
 
 // render turns whatever the page sent into text an assertion can read.
