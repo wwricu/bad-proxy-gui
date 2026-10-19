@@ -35,8 +35,12 @@ body {
     min-height: 0;
     overflow-y: auto;
     /* The first row used to start at the very top edge, so the window's own
-       title bar sat straight on top of a node name with nothing between. */
-    padding-top: 10px;
+       title bar sat straight on top of a node name with nothing between.
+       What it must not become is a band: the page is grey and macOS draws a
+       white title bar, so any padding here shows as a stripe between the two
+       and the list stops looking attached to its window. Windows hides the
+       same band because its caption is the same colour as the page. */
+    padding-top: 4px;
 }
 
 .node-item {
@@ -81,7 +85,10 @@ body {
 }
 
 .node-detail {
-    font-size: 12.5px;
+    /* The address line is the half you actually read to tell two nodes apart,
+       and at 12.5 px it was a footnote under a headline: shrinking the name
+       did not fix it, the line itself had to hold its own. */
+    font-size: 13.5px;
     color: #697079;
     overflow: hidden;
     white-space: nowrap;
@@ -277,9 +284,14 @@ body.form-page {
     box-shadow: none;
 }
 
-/* The window's own edge stands in for the card's border. */
+/* The window's own edge stands in for the card's border. The button band is a
+   separate zone divided off by that border, so it does not also need the
+   card's 16 px of air above and below: at 16 the divider and the buttons
+   looked like two things floating apart from the form, and the form's own
+   margins - the only padding the fields get - read as too tight next to them. */
 .form-window .sheet-actions {
     border-top: 1px solid #e7eaef;
+    padding: 10px 16px;
 }
 
 /* The card's body takes the room it needs and no more, so the buttons sit under
@@ -293,8 +305,10 @@ body.form-page {
     /* The shared card ends its body flush with the actions, which is right for
        the confirmation (one sentence, then the buttons) and wrong here: the
        last field's box butts straight into the divider and the form reads as
-       running out of window. */
-    padding: 16px 16px 14px;
+       running out of window. A row of the grid is 14 px apart from its
+       neighbour, so the block needs more than that at both ends or the first
+       and last fields look like they belong to the window, not the form. */
+    padding: 20px 16px 18px;
 }
 
 /* One row per field, and the rows are questions the eye has to separate: at

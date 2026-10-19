@@ -27,9 +27,19 @@ with a domain routing list, driving one or more outbound nodes.
   settings window left a band of empty window under its buttons on macOS. A
   field and a popup are drawn by the operating system, so each platform's forms
   are now measured on the platform they run on.
-* The main window opens 640 px wide rather than 800; the row menu offers Edit
+* The main window opens 580 px wide rather than 800; the row menu offers Edit
   before Test; the macOS menu-bar item is a template image now, so it takes the
   bar's own colour instead of showing the app icon's white tile.
+* The node list starts closer to the title bar, and a node's address line is
+  drawn larger: it is the half you read to tell two nodes apart, and it had
+  become a footnote under its own name.
+* The two form windows hand their buttons less air and their fields more, so
+  the divider reads as the end of the form rather than a gap in the middle of
+  it.
+* A form window now follows its own fields: switching the transport to `tls`
+  hides three rows, and the window takes the space back with them instead of
+  stranding the buttons over a band of empty window. The same holds the other
+  way, and for the line a rejected save writes under the fields.
 
 ## Known limitations
 

@@ -21,17 +21,20 @@ const mainWindowName = "main"
 
 // The main window is sized by its own content now that the forms have moved
 // out: the status bar, whose fixed parts - two actions and four readouts
-// holding their longest words - need 533 px, leaving the rest for the message
-// line. The height floor is the delete card plus a few rows. The self-test
-// drives these same numbers and reads the widths back.
+// holding their longest words - need 533 px of *client* width, leaving the rest
+// for the message line. The window has to pay its frame on top of that, and the
+// frame is 13 px wide at this machine's scaling and 16 at the CI runner's, which
+// is why the floor is 560 rather than 533. The height floor is the delete card
+// plus a few rows. The self-test drives these same numbers and reads the widths
+// back, so a floor that is wrong fails the run instead of shipping.
 //
 // The default is not far above the floor on purpose: the message line is empty
 // most of the time, so every pixel of slack between the actions and the facts
 // shows as a hole in the middle of the bar.
 const (
-	mainWindowWidth  = 640
+	mainWindowWidth  = 580
 	mainWindowHeight = 600
-	mainWindowMinW   = 600
+	mainWindowMinW   = 560
 	mainWindowMinH   = 420
 )
 
