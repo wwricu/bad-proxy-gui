@@ -566,8 +566,8 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 					shown: text,
 					lines: Math.round(m.getBoundingClientRect().height /
 						parseFloat(getComputedStyle(m).lineHeight)),
-					stated: text.startsWith("Installed: ") &&
-						/^\d{4}-\d{2}-\d{2}$/.test(text.slice("Installed: ".length)) &&
+					stated: text.startsWith("Current: ") &&
+						/^\d{4}-\d{2}-\d{2}$/.test(text.slice("Current: ".length)) &&
 						m.classList.contains("busy"),
 				};
 			})(),
