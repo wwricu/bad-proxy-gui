@@ -19,8 +19,9 @@ import "C"
 
 import (
 	_ "embed"
-	"github.com/wwricu/bad-proxy-gui/internal/platform"
 	"unsafe"
+
+	"github.com/wwricu/bad-proxy-gui/internal/platform"
 )
 
 // trayTemplateBytes is the menu-bar glyph: flat black on transparent, which is

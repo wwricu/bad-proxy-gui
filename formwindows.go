@@ -85,7 +85,7 @@ func (a *App) openSettingsWindow() {
 // The index travels in the URL: the editor reads the same state the list does,
 // so there is no second copy of a draft to keep in sync.
 func (a *App) openNodeWindow(index int) error {
-	if index >= 0 && index >= len(a.st.Nodes) {
+	if index >= 0 && index >= len(a.snapshot().Nodes) {
 		return fmt.Errorf("invalid index: %d", index)
 	}
 	name := nodeWindowPrefix + "new"

@@ -16,7 +16,7 @@ import (
 // macOS has its own version in tray_darwin.go: the item there has to be AppKit's
 // own so System Settings can manage it.
 func setupTray(a *App, wails *application.App) {
-	if platform.TrayCanHide && a.st.HideTray {
+	if platform.TrayCanHide && a.snapshot().HideTray {
 		return
 	}
 	a.trayOn = true

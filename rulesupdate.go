@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"net/http"
@@ -8,6 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/wwricu/bad-proxy-gui/internal/config"
+	"github.com/wwricu/bad-proxy-gui/internal/platform"
 )
 
 // rulesDataURL is the newest dataset the upstream repo publishes. Its release
@@ -21,9 +25,12 @@ const (
 	// body or an error page, never a real rules file, so it must not be trusted.
 	minRulesBytes = 256 * 1024
 	// A generous ceiling: the real file is far below it, and it bounds what a
-	// wrong endpoint can make the app buffer into memory.
+	// wrong endpoint can make the app write down.
 	maxRulesBytes        = 64 * 1024 * 1024
 	rulesDownloadTimeout = 60 * time.Second
+	// The opening bytes kept for the shape check - enough to recognise an HTML
+	// document without holding the body that follows it.
+	rulesHeadBytes = 64
 )
 
 // UpdateRules downloads the newest routing dataset, swaps it in and restarts the
@@ -39,7 +46,7 @@ func (a *App) UpdateRules() (string, error) {
 	// Always write into the data dir: ensureRulesDat reads that path first, so a
 	// file installed here takes precedence over the bundled copy for as long as
 	// it is there.
-	dir, err := appConfigDir()
+	dir, err := config.UserDir()
 	if err != nil {
 		return "", fmt.Errorf("no writable data directory: %w", err)
 	}
@@ -65,9 +72,9 @@ func (a *App) UpdateRules() (string, error) {
 	// only costs that click its shortcut: this dataset is installed and routing.
 	_ = rememberRules(dir, etag, modified)
 	// The core reads the named lists when the engine starts, so the new rules
-	// only bite after a restart. This is the same cheap restart every other
-	// setting change already costs.
-	if err := a.restartEngine(); err != nil {
+	// only bite after a restart. AffectsEngine cannot see this one: the dataset
+	// is not a field of the state, so the change is on the engine by definition.
+	if err := a.restartEngine(a.snapshot()); err != nil {
 		return "", err
 	}
 	if day == "" {
@@ -92,7 +99,7 @@ func sameRulesBuild(dir, etag, modified string) bool {
 // window to show before anything is clicked. Empty means the app has never
 // replaced its bundled copy, which has no date worth claiming.
 func (a *App) RulesVersion() string {
-	dir, err := appConfigDir()
+	dir, err := config.UserDir()
 	if err != nil {
 		return ""
 	}
@@ -164,10 +171,16 @@ func rulesDay(modified string) string {
 // the previous file in place unless the whole download checks out. It reports
 // how many bytes went in.
 //
-// The safety comes from the order: land the bytes in a temp file beside the
-// target, validate them whole, then rename over the target in one step. A
+// The safety comes from the order: stream the bytes into a temp file beside the
+// target, validate what was measured, then rename over the target in one step. A
 // failure anywhere before the rename leaves the running dataset untouched, so a
 // bad download cannot break routing - the worst case is "nothing changed".
+//
+// It streams rather than buffering because the body is going to a file anyway:
+// holding two and a half megabytes in memory to write them out again buys
+// nothing, and a ceiling applied to a buffer silently *is* the truncation - the
+// copy stops at the ceiling, the size check is built on the same number, and a
+// wrong endpoint's oversized stream lands as a short dataset that passed.
 func installRulesDat(url, target string) (int, error) {
 	// Same directory as the target, so the rename is atomic rather than a
 	// copy-and-delete that could be interrupted halfway.
@@ -183,31 +196,25 @@ func installRulesDat(url, target string) (int, error) {
 		return 0, fmt.Errorf("server returned %s", resp.Status)
 	}
 
-	// Buffer the whole body before touching disk: validation needs every byte,
-	// and a truncated stream must never reach the rename.
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxRulesBytes))
-	if err != nil {
-		return 0, fmt.Errorf("read failed: %w", err)
-	}
-	if err := validateRulesDat(body); err != nil {
-		return 0, err
-	}
-
 	tmp, err := os.CreateTemp(dir, "rules-*.tmp")
 	if err != nil {
 		return 0, fmt.Errorf("could not stage the download: %w", err)
 	}
 	tmpName := tmp.Name()
 	// Cleared on every path except the one where the rename consumes it; after a
-	// successful install this file no longer exists and Remove is a no-op.
+	// successful install this file no longer exists and Remove is a no-op. The
+	// handle is released first - a Windows file still open cannot be deleted.
 	defer os.Remove(tmpName)
+	defer tmp.Close()
 
-	if _, err := tmp.Write(body); err != nil {
-		tmp.Close()
-		return 0, fmt.Errorf("write failed: %w", err)
+	head, total, err := readRulesStream(tmp, resp.Body)
+	if err != nil {
+		return 0, err
+	}
+	if err := validateRulesDat(head, total); err != nil {
+		return 0, err
 	}
 	if err := tmp.Sync(); err != nil {
-		tmp.Close()
 		return 0, fmt.Errorf("flush failed: %w", err)
 	}
 	if err := tmp.Close(); err != nil {
@@ -215,22 +222,52 @@ func installRulesDat(url, target string) (int, error) {
 	}
 	// rename(2) on Unix and MoveFileEx with REPLACE_EXISTING on Windows: either
 	// the old dataset or the new one is present, never a mixture.
-	if err := os.Rename(tmpName, target); err != nil {
+	if err := platform.RenameOver(tmpName, target); err != nil {
 		return 0, fmt.Errorf("install failed: %w", err)
 	}
-	return len(body), nil
+	return int(total), nil
+}
+
+// readRulesStream copies the body into dst as it arrives and returns what will be
+// checked once it is all in: the opening bytes of the document, and how many
+// bytes there were in total.
+//
+// The budget is the ceiling plus one byte, and that one byte is the point: it is
+// what tells a body which filled the ceiling from one which went past it. A copy
+// that stops *at* the ceiling leaves a truncation whose size is exactly what the
+// check expects, and a wrong endpoint's oversized stream installs as a short
+// dataset that passed.
+func readRulesStream(dst io.Writer, src io.Reader) (head []byte, total int64, err error) {
+	budget := io.LimitReader(src, int64(maxRulesBytes)+1)
+	headBuf := make([]byte, rulesHeadBytes)
+	n, err := io.ReadFull(budget, headBuf)
+	if err != nil && err != io.ErrUnexpectedEOF {
+		return nil, 0, fmt.Errorf("read failed: %w", err)
+	}
+	headBuf = headBuf[:n]
+	// The head is kept to be looked at, not to be dropped: it goes back on the
+	// stream, so the file ends up holding the whole document.
+	written, err := io.Copy(dst, io.MultiReader(bytes.NewReader(headBuf), budget))
+	if err != nil {
+		return nil, 0, fmt.Errorf("read failed: %w", err)
+	}
+	return headBuf, written, nil
 }
 
 // validateRulesDat rejects anything that is not plausibly a full compiled
-// dataset, so a 200 response carrying an HTML error page or a truncated body
-// can never be installed in place of working rules.
-func validateRulesDat(b []byte) error {
-	if len(b) < minRulesBytes {
-		return fmt.Errorf("download was only %d bytes, too small to be the rules dataset - keeping the current one", len(b))
+// dataset, so a 200 response carrying an HTML error page, a truncated body, or a
+// stream from some other endpoint can never be installed in place of working
+// rules.
+func validateRulesDat(head []byte, total int64) error {
+	if total > int64(maxRulesBytes) {
+		return fmt.Errorf("download was %d bytes, larger than the rules dataset can be - keeping the current one", total)
+	}
+	if total < minRulesBytes {
+		return fmt.Errorf("download was only %d bytes, too small to be the rules dataset - keeping the current one", total)
 	}
 	// A real dataset is protobuf: its first byte is never the '<' of an HTML
 	// document. GitHub serves some mistakes as an HTML page with status 200.
-	if strings.HasPrefix(strings.TrimLeft(string(b[:64]), " \t\r\n"), "<") {
+	if strings.HasPrefix(strings.TrimLeft(string(head), " \t\r\n"), "<") {
 		return fmt.Errorf("download was an HTML page, not a rules dataset - keeping the current one")
 	}
 	return nil

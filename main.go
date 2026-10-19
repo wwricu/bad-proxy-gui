@@ -29,11 +29,12 @@ const mainWindowName = "main"
 // leaves a machine at 100% with the facts hanging over the edge, which is what
 // the width checks look for.
 //
-// The height floor is three node rows plus the bar: a list shorter than that is
-// unusable to click in, whatever it costs an empty list in bare window. A window
-// height is not a client height - the caption and the border are charged before
-// the page sees anything - so the floor counts them too, and the self-test reads
-// the list back to check it got three whole rows rather than trusting this sum.
+// The height floor is mainWindowMinRows node rows plus the bar: a list shorter
+// than that is unusable to click in, whatever it costs an empty list in bare
+// window. A window height is not a client height - the caption and the border
+// are charged before the page sees anything - so the floor counts them too, and
+// the self-test reads the list and the real chrome back rather than trusting
+// this sum.
 //
 // The default matches the floor on purpose: the message line is empty most of
 // the time, so every pixel of slack between the actions and the facts shows as
@@ -48,7 +49,7 @@ const (
 	mainWindowRowH    = 63 // one node row: 13+14+8+14+13+1 px
 	mainWindowListH   = 4  // the gap .node-list keeps from the window's top edge
 	mainWindowBarH    = 36
-	mainWindowChromeH = 44 // caption and border: 31 on mac, 39 on Windows at 100%
+	mainWindowChromeH = 44 // the larger of the two platforms' charge, plus scale headroom
 	mainWindowMinRows = 4  // the floor is this many node rows tall
 )
 
@@ -77,7 +78,7 @@ func main() {
 
 	frontend, err := fs.Sub(bundled, "frontend")
 	if err != nil {
-		println("Error:", err.Error())
+		logf("assets: %v", err)
 		return
 	}
 
@@ -122,7 +123,7 @@ func main() {
 	// hook runs before Wails destroys anything, so Cancel() has to be the one
 	// that says no.
 	win.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
-		if app.trayOn && !app.quitting {
+		if app.trayOn && !app.quitting.Load() {
 			e.Cancel()
 			app.hideToTray()
 		}
@@ -135,6 +136,6 @@ func main() {
 	})
 
 	if err := wails.Run(); err != nil {
-		println("Error:", err.Error())
+		logf("run loop ended: %v", err)
 	}
 }

@@ -1,12 +1,16 @@
-package main
+package config
 
 import (
 	"encoding/json"
 	"errors"
-	"github.com/wwricu/bad-proxy-gui/internal/platform"
+	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
+
+	"github.com/wwricu/bad-proxy-gui/internal/platform"
 )
 
 // Node is one upstream the user adds; it maps to a core outbound. Only one
@@ -35,9 +39,9 @@ type Node struct {
 //   - gfw-blacklist: non-mainland (geolocation-!cn list) domains through the
 //     node, the rest direct.
 const (
-	modeGlobal       = "global"
-	modeCNWhitelist  = "cn-whitelist"
-	modeGFWBlacklist = "gfw-blacklist"
+	ModeGlobal       = "global"
+	ModeCNWhitelist  = "cn-whitelist"
+	ModeGFWBlacklist = "gfw-blacklist"
 )
 
 // ProxyMode is the master switch. The engine ALWAYS runs from launch; the mode
@@ -49,14 +53,14 @@ const (
 //     apps route through it without manual configuration. Leaving system mode
 //     (and quitting while in it) clears that OS proxy again.
 const (
-	modeDirect = "direct"
-	modeProxy  = "proxy"
-	modeSystem = "system"
+	ModeDirect = "direct"
+	ModeProxy  = "proxy"
+	ModeSystem = "system"
 )
 
-// GUIState is everything persisted between runs. The two local inbounds are
+// State is everything persisted between runs. The two local inbounds are
 // fixed (socks + http); the user only picks their ports.
-type GUIState struct {
+type State struct {
 	SocksPort   string `json:"socks_port"`
 	HttpPort    string `json:"http_port"`
 	Nodes       []Node `json:"nodes"`
@@ -68,48 +72,53 @@ type GUIState struct {
 	StartLogin  bool   `json:"start_login"` // register the app to launch at login
 }
 
-func defaultState() GUIState {
-	return GUIState{SocksPort: "10808", HttpPort: "10809", Active: -1, ProxyMode: modeDirect, RoutingMode: modeGlobal}
+func DefaultState() State {
+	return State{SocksPort: "10808", HttpPort: "10809", Active: -1, ProxyMode: ModeDirect, RoutingMode: ModeGlobal}
 }
 
-// activeNode returns the selected node, or an error if none is selected.
-func (s GUIState) activeNode() (Node, error) {
+// InboundHost is the address the two local inbounds bind. Loopback keeps the
+// proxy to this machine; AllowLAN hands it to the rest of the local network.
+func (s State) InboundHost() string {
+	if s.AllowLAN {
+		return "0.0.0.0"
+	}
+	return "127.0.0.1"
+}
+
+// InboundAddrs are the two sockets the engine has to take, SOCKS first then
+// HTTP. This is the one place that knows both halves - the host above and the
+// ports - because the engine binds them, checks they are free, and waits for
+// them to answer, and all three have to mean the same pair.
+func (s State) InboundAddrs() []string {
+	host := s.InboundHost()
+	return []string{net.JoinHostPort(host, s.SocksPort), net.JoinHostPort(host, s.HttpPort)}
+}
+
+// Clone returns a copy that owns its node list. A plain struct assignment shares
+// the Nodes backing array, so a later DeleteNode - which shifts the tail down in
+// place - would rewrite the list that copy is still holding.
+func (s State) Clone() State {
+	c := s
+	if s.Nodes != nil {
+		c.Nodes = append([]Node(nil), s.Nodes...)
+	}
+	return c
+}
+
+// ActiveNode returns the selected node, or an error if none is selected.
+func (s State) ActiveNode() (Node, error) {
 	if s.Active < 0 || s.Active >= len(s.Nodes) {
 		return Node{}, errors.New("no active node selected")
 	}
 	return s.Nodes[s.Active], nil
 }
 
-// nodeFields says which optional node form fields are meaningful for a given
-// protocol+transport. It mirrors exactly what the core engine reads:
-//   - secret   -> used by btp/vless/trojan; the socks handshake ignores it.
-//   - tls      -> SNI (authority) only. TLS is implied by the transport itself.
-//   - xhttp    -> path, authority (Host), request shape (mode).
-//   - tcp      -> retired: it is cleartext, and the client offers no plaintext
-//     hop any more (see encryptedTransport).
-type nodeFields struct {
-	Secret, Authority, Path, Mode bool
-}
-
-func visibleNodeFields(protocol, transport string) nodeFields {
-	f := nodeFields{Secret: protocol != "socks"}
-	switch transport {
-	case "tls":
-		f.Authority = true
-	case "xhttp":
-		f.Authority = true
-		f.Path = true
-		f.Mode = true
-	}
-	return f
-}
-
-// xhttpMode folds a configured request shape onto one of the four names the
+// XHTTPMode folds a configured request shape onto one of the four names the
 // transport speaks. Unset is stream-one: that is the shape every node saved
 // before this field existed already used, and the one long POST request that
 // survives a buffering reverse proxy. Anything else is a typo in the state file
 // and gets the same treatment.
-func xhttpMode(mode string) string {
+func XHTTPMode(mode string) string {
 	m := strings.ToLower(strings.TrimSpace(mode))
 	switch m {
 	case "auto", "stream-up", "packet-up", "stream-one":
@@ -118,42 +127,42 @@ func xhttpMode(mode string) string {
 	return "stream-one"
 }
 
-// encryptedTransport folds every transport value a node can carry onto one of
+// EncryptedTransport folds every transport value a node can carry onto one of
 // the two hops the client is willing to make: "tls" (TCP wrapped in TLS) or
 // "xhttp" over https. Raw tcp is cleartext, so it is not offered and any legacy
 // or blank value is migrated to tls, which reaches the same server the way
 // Xray's "tcp + security: tls" does.
-func encryptedTransport(transport string) string {
+func EncryptedTransport(transport string) string {
 	if transport == "xhttp" {
 		return "xhttp"
 	}
 	return "tls"
 }
 
-// normalize enforces the "always a default node" invariant: whenever at least
+// Normalize enforces the "always a default node" invariant: whenever at least
 // one node exists, Active points at a valid one (first node if unset/out of
 // range). With zero nodes it resets Active to -1.
-func (s *GUIState) normalize() {
+func (s *State) Normalize() {
 	// Backfill and migrate legacy/unknown values ("", "off", "on", the retired
 	// "clear" action) to direct, the always-on idle state.
 	switch s.ProxyMode {
-	case modeDirect, modeProxy, modeSystem:
+	case ModeDirect, ModeProxy, ModeSystem:
 	default:
-		s.ProxyMode = modeDirect
+		s.ProxyMode = ModeDirect
 	}
 	switch s.RoutingMode {
-	case modeGlobal, modeCNWhitelist, modeGFWBlacklist:
+	case ModeGlobal, ModeCNWhitelist, ModeGFWBlacklist:
 	default:
-		s.RoutingMode = modeGlobal
+		s.RoutingMode = ModeGlobal
 	}
 	// Fold legacy tcp (and blank) transports onto tls before anything reads a
 	// node, so an old state file cannot dial a public server in the clear. The
 	// xhttp shape is folded at the same time: those nodes carry no mode field
 	// yet, and the engine should dial the request they always dialled.
 	for i := range s.Nodes {
-		s.Nodes[i].Transport = encryptedTransport(s.Nodes[i].Transport)
+		s.Nodes[i].Transport = EncryptedTransport(s.Nodes[i].Transport)
 		if s.Nodes[i].Transport == "xhttp" {
-			s.Nodes[i].Mode = xhttpMode(s.Nodes[i].Mode)
+			s.Nodes[i].Mode = XHTTPMode(s.Nodes[i].Mode)
 		}
 	}
 	if len(s.Nodes) == 0 {
@@ -165,28 +174,28 @@ func (s *GUIState) normalize() {
 	}
 }
 
-type store struct{ path string }
+type Store struct{ path string }
 
-func newStore(dir string) *store {
-	return &store{path: filepath.Join(dir, "state.json")}
+func NewStore(dir string) *Store {
+	return &Store{path: filepath.Join(dir, "state.json")}
 }
 
-// newStoreFromConfigDir creates a store in the directory appConfigDir picks.
-func newStoreFromConfigDir() *store {
-	dir, err := appConfigDir()
+// OpenStore creates a store in the per-user directory UserDir picks.
+func OpenStore() *Store {
+	dir, err := UserDir()
 	if err != nil {
 		dir = "."
 	}
 	adoptLegacyState(dir)
-	return newStore(dir)
+	return NewStore(dir)
 }
 
 // appDirName is the per-user config folder name.
 const appDirName = "bad-proxy-gui"
 
-// appConfigDir is where GUI state persists. A plain Go build (and CI smoke
+// UserDir is where GUI state persists. A plain Go build (and CI smoke
 // test) can locate it without a running app.
-func appConfigDir() (string, error) {
+func UserDir() (string, error) {
 	if dir, ok := platform.PortableConfigDir(); ok {
 		return dir, nil
 	}
@@ -228,24 +237,56 @@ func adoptLegacyState(dir string) {
 	_ = os.WriteFile(filepath.Join(dir, "state.json"), b, 0o600)
 }
 
-func (st *store) load() GUIState {
-	s := defaultState()
+// Load reads the saved state. A file that cannot be parsed is an error rather
+// than a first run: the defaults it returns are unusable until the user is told
+// why their nodes are missing, and the unreadable file is kept so that telling
+// them is possible after the next save has replaced it.
+func (st *Store) Load() (State, error) {
+	s := DefaultState()
 	b, err := os.ReadFile(st.path)
 	if err != nil {
-		return s
+		return s, nil
 	}
-	_ = json.Unmarshal(b, &s)
+	if err := json.Unmarshal(b, &s); err != nil {
+		return DefaultState(), st.quarantine(err)
+	}
 	if s.SocksPort == "" {
 		s.SocksPort = "10808"
 	}
 	if s.HttpPort == "" {
 		s.HttpPort = "10809"
 	}
-	s.normalize()
-	return s
+	s.Normalize()
+	return s, nil
 }
 
-func (st *store) save(s GUIState) error {
+// quarantine moves an unreadable state.json to a timestamped copy of itself.
+// Without this the next save writes defaults over it and both the nodes and the
+// evidence of what broke disappear together, which looks exactly like the app
+// having lost them.
+func (st *Store) quarantine(unmarshalErr error) error {
+	kept := st.path + ".corrupt-" + time.Now().Format("20060102-150405")
+	if err := os.WriteFile(kept, st.readOrEmpty(), 0o600); err != nil {
+		return fmt.Errorf("%s: state file could not be read and could not be kept either: %w",
+			st.path, err)
+	}
+	return fmt.Errorf("%s: %w (the unreadable file is kept as %s)", st.path, unmarshalErr, kept)
+}
+
+func (st *Store) readOrEmpty() []byte {
+	b, err := os.ReadFile(st.path)
+	if err != nil {
+		return nil
+	}
+	return b
+}
+
+// Save writes the state atomically: a full file or the previous one, never the
+// half that a crash or a full disk leaves behind in place of it. The temp file
+// has to be in the same directory, because rename does not cross volumes, and the
+// rename is platform.RenameOver, because the file it replaces may be held open
+// for a moment by something that is not this app.
+func (st *Store) Save(s State) error {
 	if err := os.MkdirAll(filepath.Dir(st.path), 0o700); err != nil {
 		return err
 	}
@@ -253,5 +294,18 @@ func (st *store) save(s GUIState) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(st.path, b, 0o600)
+	tmp, err := os.CreateTemp(filepath.Dir(st.path), "state-*.json")
+	if err != nil {
+		return err
+	}
+	name := tmp.Name()
+	defer os.Remove(name)
+	if _, err := tmp.Write(b); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return platform.RenameOver(name, st.path)
 }

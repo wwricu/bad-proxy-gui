@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,29 +15,86 @@ func TestValidateRulesDat(t *testing.T) {
 	real := append([]byte{0x0f, 0xff, 0x87}, make([]byte, minRulesBytes)...)
 
 	t.Run("accepts a full dataset", func(t *testing.T) {
-		if err := validateRulesDat(real); err != nil {
+		if err := validateRulesDat(real, int64(len(real))); err != nil {
 			t.Errorf("valid dataset rejected: %v", err)
 		}
 	})
 
 	t.Run("rejects a truncated body", func(t *testing.T) {
-		if err := validateRulesDat(make([]byte, minRulesBytes-1)); err == nil {
+		if err := validateRulesDat(nil, minRulesBytes-1); err == nil {
 			t.Error("a too-small download must be refused")
 		}
 	})
 
 	t.Run("rejects an HTML error page", func(t *testing.T) {
 		page := []byte("<!DOCTYPE html>\n<html>" + strings.Repeat(" ", minRulesBytes) + "</html>")
-		if err := validateRulesDat(page); err == nil {
+		if err := validateRulesDat(page, int64(len(page))); err == nil {
 			t.Error("an HTML page must not be installed as rules")
 		}
 	})
 
 	t.Run("rejects empty", func(t *testing.T) {
-		if err := validateRulesDat(nil); err == nil {
+		if err := validateRulesDat(nil, 0); err == nil {
 			t.Error("empty body must be refused")
 		}
 	})
+
+	// The ceiling is only a defence if a body that reaches it is measured as
+	// over-long. Copying to the ceiling instead would leave a truncation whose
+	// size is exactly what the check expects.
+	t.Run("rejects a body past the ceiling", func(t *testing.T) {
+		head := []byte{0x0f, 0xff, 0x87}
+		if err := validateRulesDat(head, int64(maxRulesBytes)+1); err == nil {
+			t.Error("a body larger than the dataset can be must be refused")
+		}
+	})
+}
+
+// The reader's own half of the same promise: the count it hands the validator has
+// to include the byte that proves the body was too big, not stop at the limit.
+func TestReadRulesStreamMeasuresPastTheCeiling(t *testing.T) {
+	mb := bytes.Repeat([]byte{0x0f}, 1024*1024)
+	body := io.LimitReader(chunkReader{mb}, int64(maxRulesBytes)+1024)
+
+	head, total, err := readRulesStream(io.Discard, body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total <= int64(maxRulesBytes) {
+		t.Errorf("a body of %d MB measured as %d bytes", (maxRulesBytes+1024)/1024/1024, total)
+	}
+	if len(head) != rulesHeadBytes || head[0] != 0x0f {
+		t.Errorf("the head is not the opening of the document: %d bytes %v", len(head), head)
+	}
+}
+
+// chunkReader is an endless stream of one buffer, so a test can describe a body
+// by its length without allocating it.
+type chunkReader struct{ buf []byte }
+
+func (r chunkReader) Read(p []byte) (int, error) { return copy(p, r.buf), nil }
+
+// The other half of reading a head: the bytes that were lifted out to be looked
+// at still have to reach the file. A stream copied after a consumed head is a
+// dataset missing its first sixty-four bytes, and every size check in this file
+// would call that fine.
+func TestReadRulesStreamKeepsTheHeadInTheCopy(t *testing.T) {
+	body := append([]byte{0x0f, 0xff, 0x87}, bytes.Repeat([]byte{0x2a}, 4096)...)
+	var dst bytes.Buffer
+	head, total, err := readRulesStream(&dst, bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != int64(len(body)) {
+		t.Errorf("reported %d bytes for a body of %d", total, len(body))
+	}
+	if !bytes.Equal(dst.Bytes(), body) {
+		t.Errorf("the file holds %d bytes starting %v, the body started %v",
+			dst.Len(), dst.Bytes()[:3], body[:3])
+	}
+	if !bytes.Equal(head, body[:rulesHeadBytes]) {
+		t.Error("the head is not the opening of the document")
+	}
 }
 
 // The one promise the settings button is built on: whatever the endpoint

@@ -16,6 +16,7 @@ import (
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
+	"github.com/wwricu/bad-proxy-gui/internal/config"
 	"github.com/wwricu/bad-proxy-gui/internal/platform"
 )
 
@@ -77,9 +78,9 @@ func runFormSelfTest() int {
 	c := &checker{}
 
 	// High ports: the runner may already hold 10808/10809.
-	st := defaultState()
+	st := config.DefaultState()
 	st.HttpPort, st.SocksPort = "11909", "11908"
-	st.Nodes = []Node{{
+	st.Nodes = []config.Node{{
 		Name: "alpha", Protocol: "vless", Server: "alpha.example.invalid", Port: "443",
 		Secret: "synthetic-uuid", Transport: "xhttp", Path: "/bp",
 		Authority: "alpha.example.invalid", Mode: "packet-up",
@@ -95,8 +96,11 @@ func runFormSelfTest() int {
 		return 1
 	}
 
-	a := &App{store: newStore(dir)}
-	a.st = a.store.load()
+	a := &App{store: config.NewStore(dir)}
+	if a.st, err = a.store.Load(); err != nil {
+		fmt.Println("load seed state:", err)
+		return 1
+	}
 
 	frontend, err := fs.Sub(bundled, "frontend")
 	if err != nil {
@@ -217,6 +221,14 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 		listH := floorBox.Client[1] - mainWindowBarH
 		c.check(listH >= mainWindowListH+mainWindowMinRows*mainWindowRowH,
 			"the floor shows %d whole node rows: the list has %d px", mainWindowMinRows, listH)
+		// The same half of the promise the Windows sheet makes: the constant has
+		// to be at least what this platform actually charges for the caption. If
+		// SetSize is answered with a content rect rather than a frame the
+		// difference is zero and this passes for nothing; the case it catches is
+		// the number drifting below reality.
+		c.check(minH-floorBox.Client[1] <= mainWindowChromeH,
+			"the chrome constant covers what this display charges: %d of %d",
+			minH-floorBox.Client[1], mainWindowChromeH)
 	}
 	win.SetSize(fw, fh)
 	time.Sleep(400 * time.Millisecond)
@@ -588,12 +600,12 @@ func countForms(a *App, prefix string) int {
 	return n
 }
 
-func stateFromFile(dir string) GUIState {
+func stateFromFile(dir string) config.State {
 	b, err := os.ReadFile(filepath.Join(dir, "state.json"))
 	if err != nil {
-		return GUIState{}
+		return config.State{}
 	}
-	var s GUIState
+	var s config.State
 	_ = json.Unmarshal(b, &s)
 	return s
 }

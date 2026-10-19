@@ -2,9 +2,11 @@ package main
 
 import (
 	_ "embed"
-	"github.com/wwricu/bad-proxy-gui/internal/platform"
 	"os"
 	"path/filepath"
+
+	"github.com/wwricu/bad-proxy-gui/internal/config"
+	"github.com/wwricu/bad-proxy-gui/internal/platform"
 )
 
 // rulesDat is the compiled domain-list-community rule file shipped inside the
@@ -27,7 +29,7 @@ var rulesDat []byte
 //     is read-only and therefore always matches the app version.
 //  3. the embedded copy, materialised into the data dir for a lone executable.
 func ensureRulesDat() string {
-	dir, err := appConfigDir()
+	dir, err := config.UserDir()
 	if err != nil {
 		return ""
 	}

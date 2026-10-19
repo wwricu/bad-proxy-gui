@@ -19,7 +19,12 @@ function setFormMsg(text) {
     fitFormWindow();
 }
 
-// Mirrors the backend's visibleNodeFields: which optional fields apply.
+// Which optional fields apply to a protocol+transport, and why:
+//   - secret   used by btp/vless/trojan; the socks handshake ignores it.
+//   - tls      SNI (authority) only. TLS is implied by the transport itself.
+//   - xhttp    path, authority (Host), request shape (mode).
+// This is the only copy of the rule: the engine reads whatever fields the form
+// sends, and a second copy in Go would be a second place to be wrong.
 function visibleFields(protocol, transport) {
     const f = { secret: protocol !== 'socks', authority: false, path: false, mode: false };
     if (transport === 'tls') f.authority = true;

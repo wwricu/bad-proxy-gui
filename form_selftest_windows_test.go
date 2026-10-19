@@ -20,6 +20,7 @@ import (
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
+	"github.com/wwricu/bad-proxy-gui/internal/config"
 	"github.com/wwricu/bad-proxy-gui/internal/platform"
 )
 
@@ -117,9 +118,9 @@ func runFormSelfTest() int {
 	fmt.Println("screenshots:", shots)
 
 	// High ports: a developer's own instance may already hold 10808/10809.
-	st := defaultState()
+	st := config.DefaultState()
 	st.HttpPort, st.SocksPort = "11909", "11908"
-	st.Nodes = []Node{{
+	st.Nodes = []config.Node{{
 		Name: "alpha", Protocol: "vless", Server: "alpha.example.invalid", Port: "443",
 		Secret: "synthetic-uuid", Transport: "xhttp", Path: "/bp",
 		Authority: "alpha.example.invalid", Mode: "packet-up",
@@ -135,8 +136,11 @@ func runFormSelfTest() int {
 		return 1
 	}
 
-	a := &App{store: newStore(dir)}
-	a.st = a.store.load()
+	a := &App{store: config.NewStore(dir)}
+	if a.st, err = a.store.Load(); err != nil {
+		fmt.Println("load seed state:", err)
+		return 1
+	}
 
 	frontend, err := fs.Sub(bundled, "frontend")
 	if err != nil {
@@ -303,6 +307,14 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 		c.check(listH >= mainWindowListH+mainWindowMinRows*mainWindowRowH,
 			"the minimum height shows %d whole node rows: the list has %d px of %d",
 			mainWindowMinRows, listH, layout.Page[3])
+		// The other half of that promise: the constant has to be at least what
+		// this display actually charges. Short of it, the sum hands the page less
+		// than the floor asks for and the last row is clipped at the bottom -
+		// which is what first failed here when the runner ran at a different
+		// scale factor than the machine the number was measured on.
+		c.check(minH-layout.Page[3] <= mainWindowChromeH,
+			"the chrome constant covers what this display charges: %d of %d",
+			minH-layout.Page[3], mainWindowChromeH)
 	}
 	c.shot(win, "main-minimum")
 
@@ -660,7 +672,7 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 		"the rules updater finished with a result, not a refusal: %q", first)
 	c.shot(settings, "rules-updated")
 
-	dataDir, dirErr := appConfigDir()
+	dataDir, dirErr := config.UserDir()
 	c.check(dirErr == nil, "the updater's own data dir is findable: %v", dirErr)
 	if dirErr == nil {
 		recorded := rulesDay(storedRulesDate(dataDir))
@@ -1136,12 +1148,12 @@ func countForms(a *App, prefix string) int {
 	return n
 }
 
-func stateFromFile(dir string) GUIState {
+func stateFromFile(dir string) config.State {
 	b, err := os.ReadFile(filepath.Join(dir, "state.json"))
 	if err != nil {
-		return GUIState{}
+		return config.State{}
 	}
-	var s GUIState
+	var s config.State
 	_ = json.Unmarshal(b, &s)
 	return s
 }

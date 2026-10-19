@@ -3,51 +3,109 @@ package main
 import (
 	"context"
 	"fmt"
-	"math/rand"
-	"net"
-	"strconv"
 	"strings"
-	"time"
+	"sync"
+	"sync/atomic"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wwricu/bad-proxy-gui/internal/config"
+	"github.com/wwricu/bad-proxy-gui/internal/engine"
 	"github.com/wwricu/bad-proxy-gui/internal/platform"
 )
 
 // App exposes backend methods to the frontend via Wails runtime binding.
+//
+// Each of those methods runs on a goroutine of its own: the runtime transport is
+// an ordinary net/http handler, so two clicks are live at the same time - the
+// list reading its state while an editor saves one, or a probe holding a state
+// for the seconds its test engine takes to answer. So st is only reached through
+// snapshot and edit, both under mu, and the copies they hand out own their node
+// list.
 type App struct {
 	wails      *application.App
 	mainWindow application.Window
 	tray       *application.SystemTray
-	eng        engine
-	st         GUIState
-	store      *store
-	trayOn     bool
-	quitting   bool
+	eng        engine.Engine
+	st         config.State
+	store      *config.Store
+	mu         sync.Mutex // guards st
+	trayOn     bool       // written by setupTray, before the run loop starts any goroutine
+	quitting   atomic.Bool
 }
 
 // newApp loads the saved state. It runs before the window exists: the state
-// decides whether there is a tray to hide into.
+// decides whether there is a tray to hide into, and a state file that cannot be
+// parsed has to be reported somewhere other than a window that does not exist
+// yet.
 func newApp() *App {
 	a := &App{}
-	a.store = newStoreFromConfigDir()
-	a.st = a.store.load()
+	a.store = config.OpenStore()
+	st, err := a.store.Load()
+	a.st = st
+	if err != nil {
+		logf("state: %v", err)
+	}
 	return a
+}
+
+// snapshot is the only read of the live state.
+func (a *App) snapshot() config.State {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.st.Clone()
+}
+
+// edit is the only write of the live state. It returns the state as it was and
+// as it now is, and the engine follows outside: a restart must not hold mu while
+// core tears its listeners down, and a change that buildConfig cannot see must
+// not cost a restart at all - that is what restartIfChanged is for.
+//
+// fn works on a draft. Nothing is touched until the save has succeeded, so a
+// refused or failed edit leaves both the running state and the file alone.
+func (a *App) edit(fn func(*config.State) error) (prev, next config.State, err error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	prev = a.st.Clone()
+	draft := a.st.Clone()
+	if err := fn(&draft); err != nil {
+		return prev, prev, err
+	}
+	draft.Normalize()
+	if err := a.store.Save(draft); err != nil {
+		return prev, prev, err
+	}
+	// The live field is replaced rather than edited in place, which is what makes
+	// the copy handed out here safe to hold on to.
+	a.st = draft
+	return prev, draft, nil
+}
+
+// restartIfChanged follows a saved change with a restart only when the proxy
+// built for the two states actually differs.
+func (a *App) restartIfChanged(prev, next config.State) error {
+	if !engine.AffectsEngine(prev, next) {
+		return nil
+	}
+	return a.restartEngine(next)
 }
 
 // ServiceStartup is Wails' hook for a bound service. It runs once the run loop
 // is up, which is the first moment a window or a tray may be touched.
 func (a *App) ServiceStartup(context.Context, application.ServiceOptions) error {
+	st := a.snapshot()
 	// The engine runs from launch: direct mode is always buildable, so the
 	// local inbounds answer immediately and mode switches are cheap restarts.
-	if err := a.eng.start(a.st); err != nil {
-		println("Engine start failed:", err.Error())
+	if err := a.eng.Start(st, ensureRulesDat()); err != nil {
+		logf("engine start failed: %v", err)
 		return nil
 	}
 	// Relaunching in system mode re-points the OS proxy at the (now-running)
 	// inbound. Non-system launches must not touch it: a direct/proxy start
 	// should leave whatever proxy config the user has alone.
-	if a.st.ProxyMode == modeSystem {
-		_ = platform.SetSystemProxy(a.st.HttpPort)
+	if st.ProxyMode == config.ModeSystem {
+		if err := platform.SetSystemProxy(st.HttpPort); err != nil {
+			logf("system proxy not set on relaunch: %v", err)
+		}
 	}
 	return nil
 }
@@ -80,52 +138,66 @@ func (a *App) hideToTray() {
 
 // quit stops the engine and exits, bypassing the hide-to-tray close guard.
 func (a *App) quit() {
-	a.quitting = true
+	a.quitting.Store(true)
 	a.wails.Quit()
 }
 
 // GetState returns the current GUI state to the frontend.
-func (a *App) GetState() GUIState {
-	return a.st
+func (a *App) GetState() config.State {
+	return a.snapshot()
 }
 
 // AddNode adds a new node to the list.
-func (a *App) AddNode(n Node) error {
-	a.st.Nodes = append(a.st.Nodes, n)
-	if a.st.Active < 0 {
-		a.st.Active = 0
-	}
-	a.st.normalize()
-	if err := a.store.save(a.st); err != nil {
+func (a *App) AddNode(n config.Node) error {
+	prev, next, err := a.edit(func(s *config.State) error {
+		s.Nodes = append(s.Nodes, n)
+		if s.Active < 0 {
+			s.Active = 0
+		}
+		return nil
+	})
+	if err != nil {
 		return err
 	}
-	return a.restartEngine()
+	return a.restartIfChanged(prev, next)
 }
 
 // UpdateNode replaces the node at index, keeping its position.
-func (a *App) UpdateNode(index int, n Node) error {
-	if index < 0 || index >= len(a.st.Nodes) {
-		return fmt.Errorf("invalid index: %d", index)
-	}
-	a.st.Nodes[index] = n
-	a.st.normalize()
-	if err := a.store.save(a.st); err != nil {
+func (a *App) UpdateNode(index int, n config.Node) error {
+	prev, next, err := a.edit(func(s *config.State) error {
+		return setNode(s, index, n)
+	})
+	if err != nil {
 		return err
 	}
-	return a.restartEngine()
+	return a.restartIfChanged(prev, next)
 }
 
 // DeleteNode removes a node by index.
 func (a *App) DeleteNode(index int) error {
-	if index < 0 || index >= len(a.st.Nodes) {
-		return fmt.Errorf("invalid index: %d", index)
-	}
-	a.st.Nodes = append(a.st.Nodes[:index:index], a.st.Nodes[index+1:]...)
-	a.st.normalize()
-	if err := a.store.save(a.st); err != nil {
+	prev, next, err := a.edit(func(s *config.State) error {
+		if index < 0 || index >= len(s.Nodes) {
+			return fmt.Errorf("invalid index: %d", index)
+		}
+		s.Nodes = append(s.Nodes[:index:index], s.Nodes[index+1:]...)
+		return nil
+	})
+	if err != nil {
 		return err
 	}
-	return a.restartEngine()
+	return a.restartIfChanged(prev, next)
+}
+
+// setNode replaces one entry of the list, refusing an index the list does not
+// have. The check is made against the draft the write goes to, so a delete
+// cannot slip in between the two and move a node onto a row someone else asked
+// for.
+func setNode(s *config.State, index int, n config.Node) error {
+	if index < 0 || index >= len(s.Nodes) {
+		return fmt.Errorf("invalid index: %d", index)
+	}
+	s.Nodes[index] = n
+	return nil
 }
 
 // AddNodeUI opens the editor for a new node in its own window. The window
@@ -141,23 +213,30 @@ func (a *App) EditNodeUI(index int) error {
 
 // SelectNode sets the active node.
 func (a *App) SelectNode(index int) error {
-	a.st.Active = index
-	a.st.normalize()
-	if err := a.store.save(a.st); err != nil {
+	prev, next, err := a.edit(func(s *config.State) error {
+		// Refuse rather than normalise: Normalize folds an out-of-range index
+		// onto the first node, and a click that landed on a row the list no
+		// longer has would otherwise switch the user to a different node and
+		// tell them nothing happened.
+		if index < 0 || index >= len(s.Nodes) {
+			return fmt.Errorf("invalid index: %d", index)
+		}
+		s.Active = index
+		return nil
+	})
+	if err != nil {
 		return err
 	}
-	if a.st.ProxyMode != modeDirect {
-		return a.restartEngine()
-	}
-	return nil
+	return a.restartIfChanged(prev, next)
 }
 
 // TestConnection runs a connectivity test through the proxy.
 func (a *App) TestConnection() (string, error) {
-	if !a.eng.running() {
+	st := a.snapshot()
+	if !a.eng.Running() {
 		return "", fmt.Errorf("proxy not running")
 	}
-	latency, err := a.st.dialThroughProxy()
+	latency, err := engine.DialThroughProxy(st)
 	if err != nil {
 		return "", err
 	}
@@ -168,7 +247,7 @@ func (a *App) TestConnection() (string, error) {
 // can it carry a request, measured as the latency of a 204 ping through a
 // throwaway engine that uses only that node.
 func (a *App) TestNode(index int) (string, error) {
-	d, err := probeNode(a.st, index, GUIState.dialThroughProxy)
+	d, err := engine.ProbeNode(a.snapshot(), index, ensureRulesDat(), engine.DialThroughProxy)
 	if err != nil {
 		return "", err
 	}
@@ -180,116 +259,18 @@ func (a *App) TestNode(index int) (string, error) {
 // 2xx with a body, so it answers "can I actually load a site through this node"
 // rather than just "is the server there".
 func (a *App) TestHttp(index int) (string, error) {
-	d, err := probeNode(a.st, index, GUIState.dialHTTPThroughProxy)
+	d, err := engine.ProbeNode(a.snapshot(), index, ensureRulesDat(), engine.DialHTTPThroughProxy)
 	if err != nil {
 		return "", err
 	}
 	return "HTTP " + d.Round(1e6).String(), nil
 }
 
-// probeNode starts a throwaway engine with index as its only outbound on random
-// high ports, runs probe through that engine's http inbound, and stops it. The
-// running proxy is untouched: the throwaway engine cannot collide with it and a
-// failing node cannot take the app down.
-//
-// The port is bound here first, before core is handed it. Windows carves large
-// slices of the dynamic range away for Hyper-V and winnat, and a bind into one
-// of those is a permanent "access forbidden" that core writes to its log and
-// then starts the rest of the engine around: start() returns no error, nothing
-// ever listens, and the user is told their node timed out. Asking the OS for
-// the port turns that into a different port instead of a false verdict about
-// somebody's network.
-func probeNode(st GUIState, index int, probe func(GUIState) (time.Duration, error)) (time.Duration, error) {
-	if index < 0 || index >= len(st.Nodes) {
-		return 0, fmt.Errorf("invalid index: %d", index)
-	}
-	httpPort, socksPort, err := freePortPair()
-	if err != nil {
-		return 0, err
-	}
-	st.ProxyMode = modeProxy
-	st.Active = index
-	st.HttpPort = httpPort
-	st.SocksPort = socksPort
-	var e engine
-	if err := e.start(st); err != nil {
-		return 0, fmt.Errorf("start test engine: %w", err)
-	}
-	defer e.stop()
-	// core binds its inbounds on its own clock, so probing the instant start
-	// returns can find nothing listening yet. That failure says "connection
-	// refused" about a port of our own choosing, which reads as a broken node.
-	if err := waitListening(st.HttpPort); err != nil {
-		return 0, err
-	}
-	return probe(st)
-}
-
-// freePortPair returns two adjacent loopback ports this machine will let us
-// bind, released again so core can have them. A leftover listener from an
-// earlier probe holding one is as good a reason to move on as a reserved range.
-func freePortPair() (httpPort, socksPort string, err error) {
-	p, err := pickFreePort(20000, 40000, 8)
-	if err != nil {
-		return "", "", err
-	}
-	return strconv.Itoa(p), strconv.Itoa(p + 1), nil
-}
-
-// pickFreePort draws up to attempts ports from [start, start+span) and returns
-// the first that can be bound along with its neighbour.
-func pickFreePort(start, span, attempts int) (int, error) {
-	for i := 0; i < attempts; i++ {
-		if p := start + rand.Intn(span); portsFree(p) {
-			return p, nil
-		}
-	}
-	return 0, fmt.Errorf("no free local port for the test engine")
-}
-
-// portsFree reports whether p and p+1 can both be bound right now. This is the
-// only question worth asking about a Windows excluded port range: a port inside
-// one never binds, however long the caller is willing to wait for it.
-func portsFree(p int) bool {
-	a, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", p))
-	if err != nil {
-		return false
-	}
-	defer a.Close()
-	b, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", p+1))
-	if err != nil {
-		return false
-	}
-	b.Close()
-	return true
-}
-
-// waitListening returns once something accepts connections on the local port,
-// or gives up after eight seconds of asking. The budget is not for the common
-// case - a refused connection comes back in milliseconds - but for the machine
-// that is busy: core binds its inbounds on its own clock, and on a loaded box
-// that is later than anything this loop could predict. Two seconds of that was
-// a "the test engine never came up" on a machine that was merely slow, which
-// reads to the user as a broken node.
-func waitListening(port string) error {
-	for attempt := 0; attempt < 160; attempt++ {
-		conn, err := net.DialTimeout("tcp", "127.0.0.1:"+port, 250*time.Millisecond)
-		if err == nil {
-			return conn.Close()
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	return fmt.Errorf("the test engine never came up on port %s", port)
-}
-
 // restartEngine rebuilds and restarts the embedded core proxy. The state is
 // already on disk when this runs, so a failure here means "saved, proxy not
 // running" rather than "not saved" - the message has to say which.
-func (a *App) restartEngine() error {
-	if a.eng.running() {
-		a.eng.stop()
-	}
-	if err := a.eng.start(a.st); err != nil {
+func (a *App) restartEngine(st config.State) error {
+	if err := a.eng.Restart(st, ensureRulesDat()); err != nil {
 		return fmt.Errorf("proxy restart failed: %w", err)
 	}
 	return nil
@@ -298,11 +279,11 @@ func (a *App) restartEngine() error {
 // shutdown releases the OS proxy last: the engine has to stay up until the
 // resolver no longer points at it.
 func (a *App) shutdown() {
-	if a.eng.running() {
-		a.eng.stop()
-	}
-	if a.st.ProxyMode == modeSystem {
-		_ = platform.ClearSystemProxy()
+	a.eng.Stop()
+	if a.snapshot().ProxyMode == config.ModeSystem {
+		if err := platform.ClearSystemProxy(); err != nil {
+			logf("system proxy left pointing at a stopped engine: %v", err)
+		}
 	}
 }
 
@@ -323,7 +304,7 @@ func (a *App) GetPlatformInfo() map[string]bool {
 func (a *App) ShowContextMenu(labelsNL string) int {
 	sel, err := platform.ShowNativeContextMenu(strings.Split(labelsNL, "\n"))
 	if err != nil {
-		println("native context menu unavailable: " + err.Error())
+		logf("native context menu unavailable: %v", err)
 		return -1
 	}
 	return sel

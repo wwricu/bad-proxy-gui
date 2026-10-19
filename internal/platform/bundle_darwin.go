@@ -28,7 +28,7 @@ func BundleRulesPath() string {
 		return ""
 	}
 	path := filepath.Join(filepath.Dir(contents), "Contents", "Resources", "rules.dat")
-	if fileExists(path) {
+	if st, err := os.Stat(path); err == nil && !st.IsDir() {
 		return path
 	}
 	return ""
