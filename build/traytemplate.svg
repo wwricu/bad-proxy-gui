@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">
+    <!-- The macOS menu-bar icon's source of truth: render-icon.sh turns this
+         into build/traytemplate.png, which tray.go hands to SetTemplateIcon.
+
+         Two things the app icon cannot do here. AppKit stretches whatever it
+         is given to the full thickness of the menu bar, so the app icon's
+         full-bleed tile becomes a solid block the height of the bar; and a
+         coloured tile stays coloured in dark mode. So this canvas is
+         transparent outside the glyph - that padding is the icon's size - and
+         the glyph is flat black, which is what a template image is masked
+         from: the system draws it in whatever colour the bar needs.
+
+         The ink is measured, not guessed: AppKit stretches this square canvas
+         to the full thickness of the bar, so the padding baked in here *is*
+         the icon's size. At font-size 128 the letter is 78x92 of 144 - the
+         same proportion the system's own menu-bar symbols keep to the bar,
+         where the app icon's full-bleed tile fills all of it. -->
+    <text x="71" y="74" text-anchor="middle" dominant-baseline="central"
+          font-family="Arial, 'Segoe UI', sans-serif" font-weight="700"
+          font-size="128" fill="#000000">B</text>
+</svg>

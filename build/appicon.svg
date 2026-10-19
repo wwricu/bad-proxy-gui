@@ -12,11 +12,13 @@
 
          Glyph placement is measured off the rendered png rather than guessed:
          text-anchor centres the advance width, and this letter has side
-         bearings. At these coordinates the ink is 527x629 with an even 249px
-         either side and 198px above and below. -->
+         bearings. At these coordinates the ink is 432x515 with an even 296px
+         either side and 255px above and below. The letter used to fill the
+         tile at font-size 880, which left less white around it than the Dock
+         gives any other icon and read as shouting next to them. -->
     <rect x="4" y="4" width="1016" height="1016" rx="198" fill="#ffffff"
           stroke="#dfe2e6" stroke-width="8"/>
     <text x="502" y="522" text-anchor="middle" dominant-baseline="central"
           font-family="Arial, 'Segoe UI', sans-serif" font-weight="700"
-          font-size="880" fill="#111111">B</text>
+          font-size="720" fill="#111111">B</text>
 </svg>

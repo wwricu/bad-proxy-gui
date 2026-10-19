@@ -23,14 +23,17 @@ if [ -z "$edge" ]; then
     exit 1
 fi
 
-svg="file:///$(cygpath -m "$PWD/build/appicon.svg")"
-png="$(cygpath -w "$PWD/build/appicon.png")"
+render() {
+    local svg="$1" png="$2" size="$3"
+    "$edge" --headless=new --disable-gpu --hide-scrollbars \
+        --default-background-color=00000000 --force-device-scale-factor=1 \
+        --window-size="$size,$size" --screenshot="$png" \
+        "file:///$(cygpath -m "$PWD/build/$svg")"
+    echo "rendered $png"
+}
 
-"$edge" --headless=new --disable-gpu --hide-scrollbars \
-    --default-background-color=00000000 --force-device-scale-factor=1 \
-    --window-size=1024,1024 --screenshot="$png" "$svg"
-
-echo "rendered $png"
+render appicon.svg "$(cygpath -w "$PWD/build/appicon.png")" 1024
+render traytemplate.svg "$(cygpath -w "$PWD/build/traytemplate.png")" 144
 
 # The .ico the Windows build embeds (taskbar, title bar, tray). The CLI always
 # writes a macOS icon too and CI does not use it - the mac job builds its .icns

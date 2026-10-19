@@ -16,7 +16,7 @@ func setupTray(a *App, wails *application.App) {
 	a.trayOn = true
 
 	tray := wails.SystemTray.New()
-	tray.SetIcon(trayIconBytes)
+	applyTrayIcon(tray)
 	if trayTitle != "" {
 		tray.SetLabel(trayTitle)
 	}
