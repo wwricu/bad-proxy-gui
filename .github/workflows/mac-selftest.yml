@@ -1,0 +1,52 @@
+name: macOS form self-test
+
+# The form-window harness needs a window server, so it cannot run on this
+# machine and it is not part of every push (mac runners bill at a multiple of
+# Linux ones). Dispatch it, or push a diag/** branch to run it from there.
+on:
+  workflow_dispatch:
+  push:
+    branches: ['diag/**']
+
+permissions:
+  contents: read
+
+env:
+  SHOTS: ${{ runner.temp }}/shots
+
+jobs:
+  selftest:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Fetch rules.dat for go:embed
+        # rules.dat is gitignored, but //go:embed needs it at build time.
+        run: |
+          curl -fsSL -o rules.dat \
+            https://github.com/wwricu/domain-list-community/releases/latest/download/rules.dat \
+            || : > rules.dat
+      - name: Drive the form windows
+        env:
+          BADPROXY_GUI_SELFTEST: "1"
+          BADPROXY_SELFTEST_SHOTS: ${{ env.SHOTS }}
+        # An NSException aborts the process and the reason only reaches stderr, so
+        # the log has to survive a failing step.
+        run: |
+          mkdir -p "$SHOTS"
+          go test -tags production -count=1 -v -timeout 15m . \
+            2>&1 | tee "$SHOTS/selftest.log"
+      - name: Collect crash reports
+        if: always()
+        run: |
+          mkdir -p "$SHOTS/crashreports"
+          cp -a "$HOME/Library/Logs/DiagnosticReports/." "$SHOTS/crashreports" 2>/dev/null || true
+          ls -la "$SHOTS/crashreports"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-form-selftest
+          path: ${{ env.SHOTS }}
+          if-no-files-found: ignore
