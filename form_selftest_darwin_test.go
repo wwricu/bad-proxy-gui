@@ -214,7 +214,7 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 	// If the process dies here, the crash is in the second window's asset load
 	// rather than in its creation.
 	fields := probeUntil(node, probes, formGeometry, func(s string) bool {
-		return strings.Contains(s, "xhttp") && fitted(s)
+		return strings.Contains(s, "xhttp") && fitted(s) && loopDone(s)
 	}, 30*time.Second)
 	c.check(strings.Contains(fields, `"fSecret","fAuthority","fPath","fPadding"`),
 		"xhttp offers every optional field: %s", fields)
@@ -237,7 +237,7 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 	// see coming, because the form is only tallest when it first opens.
 	probe(node, probes, `(() => { const s = document.getElementById("fTransport"); s.value = "tls"; s.dispatchEvent(new Event("change")); return "sent"; })()`)
 	shrunk := probeUntil(node, probes, formGeometry, func(s string) bool {
-		return strings.Contains(s, `"n":2`) && belowOf(s) >= 0 && belowOf(s) <= 12
+		return strings.Contains(s, `"n":2`) && settled(s) && loopDone(s)
 	}, 15*time.Second)
 	c.check(strings.Contains(shrunk, `"scroll":false`),
 		"the short form needs no scrollbar: %s", shrunk)
@@ -251,7 +251,7 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 	// Growing back is the same promise in the other direction.
 	probe(node, probes, `(() => { const s = document.getElementById("fTransport"); s.value = "xhttp"; s.dispatchEvent(new Event("change")); return "sent"; })()`)
 	grown := probeUntil(node, probes, formGeometry, func(s string) bool {
-		return strings.Contains(s, `"n":4`) && heightOf(s) == heightOf(fields)
+		return strings.Contains(s, `"n":4`) && heightOf(s) == heightOf(fields) && loopDone(s)
 	}, 15*time.Second)
 	c.check(heightOf(grown) == heightOf(fields),
 		"putting the rows back puts the window back: %s vs %s", grown, fields)
@@ -292,7 +292,7 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 	c.ok("the gear opened the settings window")
 	prefill := probeUntil(settings, probes, settingsGeometry,
 		func(s string) bool {
-			return strings.Contains(s, `"ports":"11909/11908"`) && fitted(s)
+			return strings.Contains(s, `"ports":"11909/11908"`) && fitted(s) && loopDone(s)
 		}, 30*time.Second)
 	c.check(strings.Contains(prefill, `"ports":"11909/11908"`),
 		"the settings form filled itself from the draft: %s", prefill)
@@ -364,7 +364,8 @@ const formGeometry = `
 			gap: Math.round(document.querySelector(".sheet-actions").getBoundingClientRect().top - last),
 			below: Math.round(window.innerHeight -
 				document.querySelector(".sheet-actions").getBoundingClientRect().bottom),
-			inner: [window.innerWidth, window.innerHeight]};
+			inner: [window.innerWidth, window.innerHeight],
+			fit: window.selffit};
 	})()`
 
 const settingsGeometry = `
@@ -380,7 +381,8 @@ const settingsGeometry = `
 			gap: Math.round(document.querySelector(".sheet-actions").getBoundingClientRect().top - last),
 			below: Math.round(window.innerHeight -
 				document.querySelector(".sheet-actions").getBoundingClientRect().bottom),
-			inner: [window.innerWidth, window.innerHeight]};
+			inner: [window.innerWidth, window.innerHeight],
+			fit: window.selffit};
 	})()`
 
 func gapOf(probeJSON string) int {
@@ -429,6 +431,14 @@ func settled(probeJSON string) bool {
 // compare the editor's opening size with its own.
 func fitted(probeJSON string) bool {
 	return settled(probeJSON) && belowOf(probeJSON) <= 4
+}
+
+// loopDone is the fit saying it has stopped asking. A page can look right in the
+// middle of the loop - the window already at the height the last ask wanted, the
+// judgement that accepts it still 150 ms away - and then the printed numbers are
+// an in-flight state rather than the answer.
+func loopDone(probeJSON string) bool {
+	return !strings.Contains(probeJSON, `"done":false`)
 }
 
 var probeID atomic.Int64

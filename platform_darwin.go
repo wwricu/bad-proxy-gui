@@ -23,13 +23,17 @@ const trayHasMenu = false
 // run, which reads 452 px of page out of a window of 452 and a frame of 483.
 const windowFrameHeight = 0
 
-// resizeFrameHeight is 28 here, and it is not the same convention as the one
+// resizeFrameHeight is 31 here, and it is not the same convention as the one
 // above. -[WebviewWindow setSize:] ends in -[NSWindow setFrame:display:animate:]
 // - the whole window, title bar included - where the creation call above took
-// the content rect. So the number that opened a 462 px page is the number that
-// leaves a 434 px page once the window exists, and a form being resized has to
-// pay the caption on top.
-const resizeFrameHeight = 28
+// the content rect. So the number that opened a 455 px page is a 486 px window,
+// and a form being resized has to pay the caption on top.
+//
+// 31 is what the self-test measured twice on the CI runner (a 486 frame over a
+// 455 page, a 316 frame over a 285 one) rather than AppKit's nominal 28; the
+// three pixels of difference are why the page reads its window back and asks
+// again instead of trusting this.
+const resizeFrameHeight = 31
 
 // The two forms' client heights: what each window opens at, before the page has
 // measured itself and asked for the height it actually needs.

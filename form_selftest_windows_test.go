@@ -316,7 +316,8 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 					gutter: body.offsetWidth - body.clientWidth,
 					gap: Math.round(actions.top - last),
 					below: Math.round(window.innerHeight - actions.bottom),
-					inner: [window.innerWidth, window.innerHeight]};
+					inner: [window.innerWidth, window.innerHeight],
+					fit: window.selffit};
 		})()`
 	setTransport := func(v string) string {
 		return `(() => { const s = document.getElementById("fTransport"); s.value = "` + v +
@@ -326,7 +327,7 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 	// asked twice before it lands on the height the page wants, so read until it
 	// has caught up with the page rather than trusting the first answer.
 	fields := probeUntil(node, probes, formShape, func(s string) bool {
-		return strings.Contains(s, `"n":4`) && fitted(s)
+		return strings.Contains(s, `"n":4`) && fitted(s) && loopDone(s)
 	}, 8*time.Second)
 	c.check(strings.Contains(fields, `"rows":["fSecret","fAuthority","fPath","fPadding"]`),
 		"xhttp offers every optional field: %s", fields)
@@ -379,7 +380,7 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 	// see coming, because the form is only tallest when it first opens.
 	probe(node, probes, setTransport("tls"))
 	shrunk := probeUntil(node, probes, formShape, func(s string) bool {
-		return strings.Contains(s, `"n":2`) && settled(s)
+		return strings.Contains(s, `"n":2`) && settled(s) && loopDone(s)
 	}, 8*time.Second)
 	c.check(strings.Contains(shrunk, `"scroll":false`),
 		"the short form needs no scrollbar: %s", shrunk)
@@ -393,7 +394,7 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 	// here also settles the resize the socks pass started before the next probe.
 	probe(node, probes, setTransport("xhttp"))
 	grown := probeUntil(node, probes, formShape, func(s string) bool {
-		return strings.Contains(s, `"n":4`) && heightOf(s) == heightOf(fields)
+		return strings.Contains(s, `"n":4`) && heightOf(s) == heightOf(fields) && loopDone(s)
 	}, 8*time.Second)
 	c.check(heightOf(grown) == heightOf(fields),
 		"putting the rows back puts the window back: %s vs %s", grown, fields)
@@ -511,7 +512,7 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 				document.querySelector(".sheet-actions").getBoundingClientRect().bottom),
 			inner: [window.innerWidth, window.innerHeight],
 		}))()`, func(s string) bool {
-		return strings.Contains(s, `"ports":"11909/11908"`) && fitted(s)
+		return strings.Contains(s, `"ports":"11909/11908"`) && fitted(s) && loopDone(s)
 	}, 10*time.Second)
 	c.check(strings.Contains(prefill, `"mode":"direct"`), "settings opens with the saved mode")
 	c.check(strings.Contains(prefill, `"loginRow":"flex"`), "the start-at-login row is offered on Windows")
@@ -858,6 +859,14 @@ func settled(probeJSON string) bool {
 // the window is the wrong height by the height it opened at.
 func fitted(probeJSON string) bool {
 	return settled(probeJSON) && belowOf(probeJSON) <= 4
+}
+
+// loopDone is the fit saying it has stopped asking. A page can look right in the
+// middle of the loop - the window already at the height the last ask wanted, the
+// judgement that accepts it still 150 ms away - and then the printed numbers are
+// an in-flight state rather than the answer.
+func loopDone(probeJSON string) bool {
+	return !strings.Contains(probeJSON, `"done":false`)
 }
 
 // waitForm polls until a window with the given name exists and has a native
