@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/rand"
 	"strings"
+	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
@@ -161,36 +162,55 @@ func (a *App) TestConnection() (string, error) {
 	return latency.Round(1e6).String(), nil
 }
 
-// TestNode probes one node without touching the running proxy: it starts a
-// throwaway engine on random high ports with that node as the only outbound,
-// dials the 204 probe through it, and stops the engine.
+// TestNode probes one node's reachability: does the tunnel to it come up and
+// can it carry a request, measured as the latency of a 204 ping through a
+// throwaway engine that uses only that node.
 func (a *App) TestNode(index int) (string, error) {
-	if index < 0 || index >= len(a.st.Nodes) {
-		return "", fmt.Errorf("invalid index: %d", index)
+	d, err := probeNode(a.st, index, GUIState.dialThroughProxy)
+	if err != nil {
+		return "", err
 	}
-	st := a.st
+	return d.Round(1e6).String(), nil
+}
+
+// TestHttp probes one node's end-to-end web reachability: beyond the tunnel
+// coming up, it fetches a real plain-HTTP page through the node and requires a
+// 2xx with a body, so it answers "can I actually load a site through this node"
+// rather than just "is the server there".
+func (a *App) TestHttp(index int) (string, error) {
+	d, err := probeNode(a.st, index, GUIState.dialHTTPThroughProxy)
+	if err != nil {
+		return "", err
+	}
+	return "HTTP " + d.Round(1e6).String(), nil
+}
+
+// probeNode starts a throwaway engine with index as its only outbound on random
+// high ports, runs probe through that engine's http inbound, and stops it. The
+// running proxy is untouched: the throwaway engine cannot collide with it and a
+// failing node cannot take the app down. Random ports are retried because a
+// leftover listener from an earlier test may still hold one.
+func probeNode(st GUIState, index int, probe func(GUIState) (time.Duration, error)) (time.Duration, error) {
+	if index < 0 || index >= len(st.Nodes) {
+		return 0, fmt.Errorf("invalid index: %d", index)
+	}
 	st.ProxyMode = modeProxy
 	st.Active = index
 	var e engine
 	var err error
 	for attempt := 0; attempt < 3; attempt++ {
-		p1 := 20000 + rand.Intn(40000)
-		st.HttpPort = fmt.Sprintf("%d", p1)
-		st.SocksPort = fmt.Sprintf("%d", p1+1)
-		err = e.start(st)
-		if err == nil {
+		p := 20000 + rand.Intn(40000)
+		st.HttpPort = fmt.Sprintf("%d", p)
+		st.SocksPort = fmt.Sprintf("%d", p+1)
+		if err = e.start(st); err == nil {
 			break
 		}
 	}
 	if err != nil {
-		return "", fmt.Errorf("start test engine: %w", err)
+		return 0, fmt.Errorf("start test engine: %w", err)
 	}
 	defer e.stop()
-	latency, err := st.dialThroughProxy()
-	if err != nil {
-		return "", err
-	}
-	return latency.Round(1e6).String(), nil
+	return probe(st)
 }
 
 // restartEngine rebuilds and restarts the embedded core proxy. The state is

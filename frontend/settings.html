@@ -39,6 +39,13 @@
                     <label for="sTray">Hide tray icon (after restart)</label>
                 </div>
             </div>
+            <!-- Routing rules live in rules.dat, shipped with the app and read
+                 when the engine starts. This pulls the newest dataset from the
+                 upstream repo and restarts the engine so it takes effect. -->
+            <div class="rules-row">
+                <button id="sUpdateRules" class="btn-secondary">Update rules</button>
+                <span id="sRulesMsg" class="rules-msg" aria-live="polite"></span>
+            </div>
             <!-- Where an OK that did not take effect says why, beside the box
                  that caused it. -->
             <div id="sMsg" class="form-msg" aria-live="polite"></div>

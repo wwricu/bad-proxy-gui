@@ -198,7 +198,7 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 				.map((el) => el.textContent.trim()),
 			native: window.selftest.menuLabels,
 		}))()`)
-	c.check(strings.Contains(menu, `"Edit","Test","Delete"`),
+	c.check(strings.Contains(menu, `"Edit","Test","HTTP test","Delete"`),
 		"the row menu offers Edit above Test: %s", menu)
 
 	// ---- opening the editor: the step that ships broken ----

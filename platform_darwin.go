@@ -45,5 +45,5 @@ const resizeFrameHeight = 31
 // holding a band of empty window under its own buttons.
 const (
 	nodeFormHeight     = 462
-	settingsFormHeight = 302
+	settingsFormHeight = 346
 )

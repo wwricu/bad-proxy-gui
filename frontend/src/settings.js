@@ -44,6 +44,26 @@ async function init() {
 
 document.getElementById('settingsCancel').onclick = () => Window.Close();
 
+// Updating rules downloads a new file and restarts the engine, which is not
+// instant, so the button is disabled for the duration and its outcome is read
+// inline instead of closing the window.
+document.getElementById('sUpdateRules').onclick = async () => {
+    const btn = document.getElementById('sUpdateRules');
+    const msg = document.getElementById('sRulesMsg');
+    btn.disabled = true;
+    msg.classList.add('busy');
+    msg.textContent = 'Downloading...';
+    try {
+        msg.classList.remove('busy');
+        msg.textContent = await API().UpdateRules();
+    } catch (err) {
+        msg.textContent = err.message;
+    } finally {
+        btn.disabled = false;
+        fitFormWindow();
+    }
+};
+
 document.getElementById('settingsOK').onclick = async () => {
     const draft = {
         http_port: document.getElementById('sHttpPort').value.trim(),

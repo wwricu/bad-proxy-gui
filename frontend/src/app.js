@@ -92,7 +92,7 @@ function resultChip(result) {
 // The row menu's items, in the one order both of its renderings draw them in:
 // the native Win32 menu is built from this list joined by newlines, the DOM
 // fallback in index.html lists the same three.
-const ctxMenuLabels = ['Edit', 'Test', 'Delete'];
+const ctxMenuLabels = ['Edit', 'Test', 'HTTP test', 'Delete'];
 
 // On Windows the backend pops a real Win32 shortcut menu at the cursor; the
 // DOM menu below stays as the fallback for macOS/Linux.
@@ -107,7 +107,8 @@ async function nodeContextMenu(idx, x, y) {
         }
         if (sel === 0) editNode(idx);
         else if (sel === 1) ctxActionTest(idx);
-        else if (sel === 2) ctxActionDelete(idx);
+        else if (sel === 2) ctxActionTestHttp(idx);
+        else if (sel === 3) ctxActionDelete(idx);
         return;
     }
     openCtxMenu(idx, x, y);
@@ -137,6 +138,19 @@ async function ctxActionTest(idx) {
     try {
         const latency = await API().TestNode(idx);
         nodeResults[idx] = latency;
+        setStatus('');
+    } catch (err) {
+        nodeResults[idx] = 'Failed: ' + err.message;
+    }
+    render();
+}
+
+async function ctxActionTestHttp(idx) {
+    nodeResults[idx] = 'Testing…';
+    render();
+    try {
+        const result = await API().TestHttp(idx);
+        nodeResults[idx] = result;
         setStatus('');
     } catch (err) {
         nodeResults[idx] = 'Failed: ' + err.message;
@@ -174,6 +188,11 @@ document.getElementById('deleteOK').onclick = async () => {
 document.getElementById('ctxTest').onclick = () => {
     closeCtxMenu();
     if (ctxIdx >= 0) ctxActionTest(ctxIdx);
+};
+
+document.getElementById('ctxTestHttp').onclick = () => {
+    closeCtxMenu();
+    if (ctxIdx >= 0) ctxActionTestHttp(ctxIdx);
 };
 
 document.getElementById('ctxEdit').onclick = () => {
@@ -237,6 +256,7 @@ async function selectNode(idx) {
 if (new URLSearchParams(window.location.search).has('selftest')) {
     window.selftest = {
         testNode: ctxActionTest,
+        testHttp: ctxActionTestHttp,
         askDelete: ctxActionDelete,
         // The list the native menu is built from. Its order is a decision, so
         // the self-test reads it back rather than trust the call site.

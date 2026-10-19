@@ -397,6 +397,27 @@ body.form-page {
     text-align: left;
 }
 
+.rules-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 14px;
+}
+
+.rules-msg {
+    font-size: 12px;
+    line-height: 1.35;
+    color: #22262b;
+}
+
+.rules-msg:empty {
+    display: none;
+}
+
+.rules-msg.busy {
+    color: #697079;
+}
+
 /* The card's own message line. A setting that failed to take effect is read
    here, next to the box that caused it, not on the main window's bar after the
    card is gone. */

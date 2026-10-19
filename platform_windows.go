@@ -45,5 +45,5 @@ const resizeFrameHeight = windowFrameHeight
 // measured fails the run instead of flickering in the release.
 const (
 	nodeFormHeight     = 478
-	settingsFormHeight = 347
+	settingsFormHeight = 393
 )

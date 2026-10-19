@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"io"
 	"net/http"
 	"net/url"
 	"time"
@@ -123,21 +124,34 @@ func (n Node) outbound(tag string) core.OutboundConfig {
 // testURL is a well-known connectivity probe returning 204 with no body.
 const testURL = "http://www.gstatic.com/generate_204"
 
-// dialThroughProxy makes a real request out through the local http inbound and
-// returns the round-trip latency. 2xx/204 counts as success; anything else (or
-// a transport error) means the proxy path is not actually carrying traffic.
-func (s GUIState) dialThroughProxy() (time.Duration, error) {
-	proxyURL, err := url.Parse("http://127.0.0.1:" + s.HttpPort)
+// httpTestURL is a plain-HTTP (no TLS) site that answers 200 with a body. It is
+// the classic captive-portal / connectivity probe: fetching it through the proxy
+// proves not just that the tunnel is up but that ordinary web traffic reaches the
+// open internet and comes back.
+const httpTestURL = "http://neverssl.com/"
+
+// proxyClient routes a request through the local http inbound on the given port,
+// independent of the OS system proxy.
+func proxyClient(httpPort string) *http.Client {
+	proxyURL, err := url.Parse("http://127.0.0.1:" + httpPort)
 	if err != nil {
-		return 0, err
+		return nil
 	}
-	// route the probe through the local http inbound explicitly, so the test
-	// does not depend on the OS-level system proxy being enabled.
-	client := &http.Client{
+	return &http.Client{
 		Timeout: 10 * time.Second,
 		Transport: &http.Transport{Proxy: func(*http.Request) (*url.URL, error) {
 			return proxyURL, nil
 		}},
+	}
+}
+
+// dialThroughProxy makes a real request out through the local http inbound and
+// returns the round-trip latency. 2xx/204 counts as success; anything else (or
+// a transport error) means the proxy path is not actually carrying traffic.
+func (s GUIState) dialThroughProxy() (time.Duration, error) {
+	client := proxyClient(s.HttpPort)
+	if client == nil {
+		return 0, errors.New("bad http port")
 	}
 
 	start := time.Now()
@@ -149,6 +163,36 @@ func (s GUIState) dialThroughProxy() (time.Duration, error) {
 	elapsed := time.Since(start)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return elapsed, errors.New("proxy returned " + resp.Status)
+	}
+	return elapsed, nil
+}
+
+// dialHTTPThroughProxy fetches a real web page through the local http inbound and
+// requires a 2xx carrying a non-empty body, so a tunnel that comes up but cannot
+// actually carry web traffic fails here. It returns the round-trip latency.
+func (s GUIState) dialHTTPThroughProxy() (time.Duration, error) {
+	client := proxyClient(s.HttpPort)
+	if client == nil {
+		return 0, errors.New("bad http port")
+	}
+
+	start := time.Now()
+	resp, err := client.Get(httpTestURL)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+	elapsed := time.Since(start)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return elapsed, errors.New("proxy returned " + resp.Status)
+	}
+	// A 200 with an empty body is a broken answer, not a loaded page.
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	if err != nil {
+		return elapsed, err
+	}
+	if len(body) == 0 {
+		return elapsed, errors.New("page came back empty")
 	}
 	return elapsed, nil
 }

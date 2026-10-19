@@ -462,7 +462,7 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 			m.style.left = "60px"; m.style.top = "120px"; m.style.display = "block";
 			return {items, native: window.selftest.menuLabels};
 		})()`)
-	c.check(strings.Contains(menu, `"Edit","Test","Delete"`),
+	c.check(strings.Contains(menu, `"Edit","Test","HTTP test","Delete"`),
 		"the row menu offers Edit above Test: %s", menu)
 	c.shot(win, "row-menu")
 	probe(win, probes, `(() => { document.getElementById("ctxMenu").style.display = "none"; return "sent"; })()`)

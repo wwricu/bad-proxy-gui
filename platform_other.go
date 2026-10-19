@@ -30,5 +30,5 @@ const resizeFrameHeight = 0
 // page asks for the height it needs.
 const (
 	nodeFormHeight     = 462
-	settingsFormHeight = 302
+	settingsFormHeight = 346
 )
