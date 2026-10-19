@@ -25,12 +25,16 @@ const windowFrameHeight = 36
 
 // The two forms' client heights, measured on this platform.
 //
-// The 6 px over the measured content is not slack to look good in: the frame is
-// rounded from physical pixels, so a 100%-scaled display loses three more
-// client pixels than a 175% one, and the editor's nine fields fit exactly at
-// the higher scale and scroll at the lower. The self-test run on the CI
-// runner - 100% - is what found it.
+// They are the worst case over display scales, not the number this machine
+// reads. Two things move with the scale: the frame is rounded from physical
+// pixels, so a 100%-scaled display loses three more client pixels than the 175%
+// one these were first measured at; and every 14 px gap in the form rounds
+// separately, so the same page is a few pixels taller at 100% than at 175%.
+// Both were found by the self-test run on the CI runner, which is 100%.
+//
+// Too short scrolls, which is the failure worth paying a band of window under
+// the buttons to avoid.
 const (
-	nodeFormHeight     = 468
+	nodeFormHeight     = 478
 	settingsFormHeight = 347
 )
