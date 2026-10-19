@@ -112,8 +112,8 @@ func (n Node) outbound(tag string) core.OutboundConfig {
 			Authority: n.Authority,
 			// Always on: the client makes no plaintext hop, so xhttp runs over
 			// https and there is no user-facing toggle to turn it off.
-			Tls:     true,
-			Padding: n.Padding,
+			Tls:  true,
+			Mode: n.Mode,
 		},
 	}
 }

@@ -25,19 +25,31 @@ const mainWindowName = "main"
 // scaling, leaving the rest for the message line. Text does not scale evenly, so
 // the same bar needs 546 px on a display at 100%, and the floor is set by that
 // worst case plus the frame, which is 13 px wide at 175% and 16 at 100%. The
-// height floor is the delete card plus a few rows. The self-test drives these
-// same numbers and reads the widths back on both scalings, so a floor that is
-// wrong fails the run instead of shipping.
+// height floor is one node row plus the bar, so an empty list does not look like
+// a band of bare window under the last item.
 //
-// The default is not far above the floor on purpose: the message line is empty
-// most of the time, so every pixel of slack between the actions and the facts
-// shows as a hole in the middle of the bar.
+// The default matches the floor on purpose: the message line is empty most of
+// the time, so every pixel of slack between the actions and the facts shows as
+// a hole in the middle of the bar.
 const (
-	mainWindowWidth  = 580
-	mainWindowHeight = 600
-	mainWindowMinW   = 572
-	mainWindowMinH   = 420
+	mainWindowMinW   = 560
+	mainWindowRowH   = 63 // one node row: 13+14+8+14+13+1 px
+	mainWindowBarH   = 36
 )
+
+// mainWindowSize returns the initial width/height and the minimums. Width is
+// fixed (the bar decides it); height grows with the number of saved nodes so
+// the list always has room for one extra row.
+func mainWindowSize(nodeCount int) (w, h, minW, minH int) {
+	w = mainWindowMinW
+	minW = mainWindowMinW
+	minH = mainWindowBarH + mainWindowRowH // one node + the bar
+	h = mainWindowBarH + (nodeCount+1)*mainWindowRowH
+	if h < minH {
+		h = minH
+	}
+	return
+}
 
 func main() {
 	// The tray is declared before the run loop starts, and whether it exists
@@ -72,13 +84,15 @@ func main() {
 		OnShutdown: app.shutdown,
 	})
 
+	nodeCount := len(app.st.Nodes)
+	w, h, minW, minH := mainWindowSize(nodeCount)
 	win := wails.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:      mainWindowName,
 		Title:     windowTitle,
-		Width:     mainWindowWidth,
-		Height:    mainWindowHeight,
-		MinWidth:  mainWindowMinW,
-		MinHeight: mainWindowMinH,
+		Width:     w,
+		Height:    h,
+		MinWidth:  minW,
+		MinHeight: minH,
 		URL:       "/",
 	})
 

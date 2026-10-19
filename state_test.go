@@ -52,10 +52,10 @@ func TestVisibleNodeFields(t *testing.T) {
 	}{
 		{"vless", "tcp", nodeFields{Secret: true}},
 		{"vless", "tls", nodeFields{Secret: true, Authority: true}},
-		{"vless", "xhttp", nodeFields{Secret: true, Authority: true, Path: true, Padding: true}},
-		{"trojan", "xhttp", nodeFields{Secret: true, Authority: true, Path: true, Padding: true}},
+		{"vless", "xhttp", nodeFields{Secret: true, Authority: true, Path: true, Mode: true}},
+		{"trojan", "xhttp", nodeFields{Secret: true, Authority: true, Path: true, Mode: true}},
 		{"btp", "tls", nodeFields{Secret: true, Authority: true}},
-		{"socks", "xhttp", nodeFields{Authority: true, Path: true, Padding: true}},
+		{"socks", "xhttp", nodeFields{Authority: true, Path: true, Mode: true}},
 		{"socks", "tcp", nodeFields{}},
 	}
 	for _, tc := range cases {

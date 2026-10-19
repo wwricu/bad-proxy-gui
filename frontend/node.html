@@ -28,7 +28,13 @@
                 </select>
                 <label id="lAuthority">Domain (SNI/Host)</label><input type="text" id="fAuthority">
                 <label id="lPath">Path</label><input type="text" id="fPath">
-                <label id="lPadding">Padding range</label><input type="text" id="fPadding">
+                <label id="lMode">Mode</label>
+                <select id="fMode">
+                    <option value="stream-one">stream-one</option>
+                    <option value="auto">auto</option>
+                    <option value="stream-up">stream-up</option>
+                    <option value="packet-up">packet-up</option>
+                </select>
             </div>
             <div id="fMsg" class="form-msg" aria-live="polite"></div>
         </div>

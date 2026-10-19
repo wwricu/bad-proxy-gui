@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // Node is one upstream the user adds; it maps to a core outbound. Only one
@@ -23,7 +24,7 @@ type Node struct {
 	Transport string `json:"transport"`
 	Path      string `json:"path"`      // xhttp request path
 	Authority string `json:"authority"` // SNI / Host, defaults to Server
-	Padding   string `json:"padding"`   // xhttp X-Padding range
+	Mode      string `json:"mode"`      // xhttp request shape: auto, stream-one, stream-up, packet-up
 }
 
 // Routing modes are the presets the UI exposes. They only take effect in the
@@ -82,11 +83,11 @@ func (s GUIState) activeNode() (Node, error) {
 // protocol+transport. It mirrors exactly what the core engine reads:
 //   - secret   -> used by btp/vless/trojan; the socks handshake ignores it.
 //   - tls      -> SNI (authority) only. TLS is implied by the transport itself.
-//   - xhttp    -> path, authority (Host), padding range.
+//   - xhttp    -> path, authority (Host), request shape (mode).
 //   - tcp      -> retired: it is cleartext, and the client offers no plaintext
 //     hop any more (see encryptedTransport).
 type nodeFields struct {
-	Secret, Authority, Path, Padding bool
+	Secret, Authority, Path, Mode bool
 }
 
 func visibleNodeFields(protocol, transport string) nodeFields {
@@ -97,9 +98,23 @@ func visibleNodeFields(protocol, transport string) nodeFields {
 	case "xhttp":
 		f.Authority = true
 		f.Path = true
-		f.Padding = true
+		f.Mode = true
 	}
 	return f
+}
+
+// xhttpMode folds a configured request shape onto one of the four names the
+// transport speaks. Unset is stream-one: that is the shape every node saved
+// before this field existed already used, and the one long POST request that
+// survives a buffering reverse proxy. Anything else is a typo in the state file
+// and gets the same treatment.
+func xhttpMode(mode string) string {
+	m := strings.ToLower(strings.TrimSpace(mode))
+	switch m {
+	case "auto", "stream-up", "packet-up", "stream-one":
+		return m
+	}
+	return "stream-one"
 }
 
 // encryptedTransport folds every transport value a node can carry onto one of
@@ -131,9 +146,14 @@ func (s *GUIState) normalize() {
 		s.RoutingMode = modeGlobal
 	}
 	// Fold legacy tcp (and blank) transports onto tls before anything reads a
-	// node, so an old state file cannot dial a public server in the clear.
+	// node, so an old state file cannot dial a public server in the clear. The
+	// xhttp shape is folded at the same time: those nodes carry no mode field
+	// yet, and the engine should dial the request they always dialled.
 	for i := range s.Nodes {
 		s.Nodes[i].Transport = encryptedTransport(s.Nodes[i].Transport)
+		if s.Nodes[i].Transport == "xhttp" {
+			s.Nodes[i].Mode = xhttpMode(s.Nodes[i].Mode)
+		}
 	}
 	if len(s.Nodes) == 0 {
 		s.Active = -1

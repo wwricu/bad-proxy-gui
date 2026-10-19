@@ -121,7 +121,7 @@ func runFormSelfTest() int {
 	st.Nodes = []Node{{
 		Name: "alpha", Protocol: "vless", Server: "alpha.example.invalid", Port: "443",
 		Secret: "synthetic-uuid", Transport: "xhttp", Path: "/bp",
-		Authority: "alpha.example.invalid", Padding: "50-200",
+		Authority: "alpha.example.invalid", Mode: "packet-up",
 	}}
 	st.Active = 0
 	seed, err := json.MarshalIndent(st, "", "  ")
@@ -149,13 +149,14 @@ func runFormSelfTest() int {
 		Services:    []application.Service{application.NewService(a)},
 	})
 	a.wails = wails
+	w, h, minW, minH := mainWindowSize(len(st.Nodes))
 	a.mainWindow = wails.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:      mainWindowName,
 		Title:     windowTitle,
-		Width:     mainWindowWidth,
-		Height:    mainWindowHeight,
-		MinWidth:  mainWindowMinW,
-		MinHeight: mainWindowMinH,
+		Width:     w,
+		Height:    h,
+		MinWidth:  minW,
+		MinHeight: minH,
 		// The query is what hands the harness the two actions that a native OS
 		// menu otherwise hides.
 		URL: "/?selftest=1",
@@ -195,6 +196,7 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 
 	// ---- the main window ----
 	c.shot(win, "main")
+	_, _, minW, minH := mainWindowSize(len(a.st.Nodes))
 	readouts := probeUntil(win, probes, `
 		["roHttp","roSocks","roMode","roRouting"].map(id => {
 			const el = document.getElementById(id);
@@ -221,7 +223,7 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 	// stay reachable and the delete card still fits. The readouts are measured
 	// with the longest words they can hold, because "Direct" is not what sets
 	// the width.
-	win.SetSize(mainWindowMinW, mainWindowMinH)
+	win.SetSize(minW, minH)
 	time.Sleep(800 * time.Millisecond)
 	fits := probe(win, probes, `
 		(() => {
@@ -310,7 +312,7 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 			const actions = document.querySelector(".sheet-actions").getBoundingClientRect();
 			const last = Math.max(...[...document.querySelectorAll(".sheet-body *")]
 				.map((el) => el.getBoundingClientRect().bottom).filter((y) => y > 0));
-			const rows = ["fSecret","fAuthority","fPath","fPadding"].filter(shown);
+			const rows = ["fSecret","fAuthority","fPath","fMode"].filter(shown);
 			return {rows, n: rows.length,
 					scroll: body.scrollHeight > body.clientHeight,
 					gutter: body.offsetWidth - body.clientWidth,
@@ -329,7 +331,7 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 	fields := probeUntil(node, probes, formShape, func(s string) bool {
 		return strings.Contains(s, `"n":4`) && fitted(s) && loopDone(s)
 	}, 8*time.Second)
-	c.check(strings.Contains(fields, `"rows":["fSecret","fAuthority","fPath","fPadding"]`),
+	c.check(strings.Contains(fields, `"rows":["fSecret","fAuthority","fPath","fMode"]`),
 		"xhttp offers every optional field: %s", fields)
 	c.check(strings.Contains(fields, `"scroll":false`),
 		"the tallest form needs no scrollbar: %s", fields)
@@ -362,7 +364,7 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 			const hidden = (id) => getComputedStyle(document.getElementById(id)).display === "none";
 			const actions = document.querySelector(".sheet-actions").getBoundingClientRect();
 			const body = document.querySelector(".sheet-body");
-			const out = {hidden: ["fSecret","fAuthority","fPath","fPadding"].filter(hidden),
+			const out = {hidden: ["fSecret","fAuthority","fPath","fMode"].filter(hidden),
 					fits: actions.bottom <= window.innerHeight + 1,
 					scroll: body.scrollHeight > body.clientHeight};
 			sel.value = "vless";
@@ -656,7 +658,8 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 	c.check(active == "1", "a click moves the highlight: row %s active", active)
 	c.check(stateFromFile(dir).Active == 1, "the click reached state.json: active=%d", stateFromFile(dir).Active)
 
-	win.SetSize(mainWindowWidth, mainWindowHeight)
+	w2, h2, _, _ := mainWindowSize(len(a.st.Nodes))
+	win.SetSize(w2, h2)
 	time.Sleep(600 * time.Millisecond)
 	probe(win, probes, `
 		(() => { document.querySelectorAll(".node-item")[0].dispatchEvent(new MouseEvent("dblclick", {bubbles: true})); return "sent"; })()`)

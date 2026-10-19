@@ -26,6 +26,8 @@ github.com/wailsapp/wails/v3 v3.0.0-beta.31 h1:JquV/SynfuKvkzev1OmDXz+ta64gcZaEb
 github.com/wailsapp/wails/v3 v3.0.0-beta.31/go.mod h1:Tk3i8pyehpIdV4aS9GfpgGjk7eOjuSpCrpyJXpS6y64=
 github.com/wwricu/bad-proxy-core v1.2.0-beta-1 h1:ijYhPieafZi0O9NOhBVoiKpmziyC+iLYcfeVIoEVqNE=
 github.com/wwricu/bad-proxy-core v1.2.0-beta-1/go.mod h1:SeA0286o21CeY0E1oL2WMpBy+b4TgbRLp5S/G+Qtpt8=
+github.com/wwricu/bad-proxy-core v1.2.0-beta-2 h1:hU0gCvVXDdElGMAYRez7Da/ZocDSbL0RI8W7ea3GNV8=
+github.com/wwricu/bad-proxy-core v1.2.0-beta-2/go.mod h1:SeA0286o21CeY0E1oL2WMpBy+b4TgbRLp5S/G+Qtpt8=
 golang.org/x/sys v0.1.0/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
 golang.org/x/sys v0.48.0 h1:bbX/i/6MgT9BVLM9RT1thmxL04yeTAhbEz4SyadbXoo=
 golang.org/x/sys v0.48.0/go.mod h1:hNLxWAXmnKAxqDtdwIYC4bM9oQPEecfsnNMuSxOs3og=

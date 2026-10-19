@@ -335,6 +335,8 @@ body.form-page {
     font-size: 13px;
     background: white;
     width: 100%;
+    box-sizing: border-box;
+    height: 32px;
 }
 
 .form-grid input[type="text"]:focus,

@@ -21,9 +21,9 @@ function setFormMsg(text) {
 
 // Mirrors the backend's visibleNodeFields: which optional fields apply.
 function visibleFields(protocol, transport) {
-    const f = { secret: protocol !== 'socks', authority: false, path: false, padding: false };
+    const f = { secret: protocol !== 'socks', authority: false, path: false, mode: false };
     if (transport === 'tls') f.authority = true;
-    if (transport === 'xhttp') { f.authority = true; f.path = true; f.padding = true; }
+    if (transport === 'xhttp') { f.authority = true; f.path = true; f.mode = true; }
     return f;
 }
 
@@ -41,7 +41,7 @@ function applyFieldVisibility() {
     setRow('lSecret', 'fSecret', f.secret);
     setRow('lAuthority', 'fAuthority', f.authority);
     setRow('lPath', 'fPath', f.path);
-    setRow('lPadding', 'fPadding', f.padding);
+    setRow('lMode', 'fMode', f.mode);
     fitFormWindow();
 }
 
@@ -56,7 +56,7 @@ async function init() {
     document.getElementById('fTransport').value = n.transport || 'xhttp';
     document.getElementById('fAuthority').value = n.authority || '';
     document.getElementById('fPath').value = n.path || '';
-    document.getElementById('fPadding').value = n.padding || '';
+    document.getElementById('fMode').value = n.mode || 'stream-one';
     applyFieldVisibility();
     document.getElementById('fName').focus();
 }
@@ -75,7 +75,7 @@ document.getElementById('modalSave').onclick = async () => {
         transport: document.getElementById('fTransport').value,
         path: document.getElementById('fPath').value.trim(),
         authority: document.getElementById('fAuthority').value.trim(),
-        padding: document.getElementById('fPadding').value.trim(),
+        mode: document.getElementById('fMode').value,
     };
     if (!node.name || !node.server || !node.port) {
         setFormMsg('Name, address and port are required');

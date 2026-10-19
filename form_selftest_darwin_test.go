@@ -81,7 +81,7 @@ func runFormSelfTest() int {
 	st.Nodes = []Node{{
 		Name: "alpha", Protocol: "vless", Server: "alpha.example.invalid", Port: "443",
 		Secret: "synthetic-uuid", Transport: "xhttp", Path: "/bp",
-		Authority: "alpha.example.invalid", Padding: "50-200",
+		Authority: "alpha.example.invalid", Mode: "packet-up",
 	}}
 	st.Active = 0
 	seed, err := json.MarshalIndent(st, "", "  ")
@@ -113,13 +113,14 @@ func runFormSelfTest() int {
 		Services: []application.Service{application.NewService(a)},
 	})
 	a.wails = wails
+	w, h, minW, minH := mainWindowSize(len(st.Nodes))
 	a.mainWindow = wails.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:      mainWindowName,
 		Title:     windowTitle,
-		Width:     mainWindowWidth,
-		Height:    mainWindowHeight,
-		MinWidth:  mainWindowMinW,
-		MinHeight: mainWindowMinH,
+		Width:     w,
+		Height:    h,
+		MinWidth:  minW,
+		MinHeight: minH,
 		URL:       "/?selftest=1",
 	})
 
@@ -216,7 +217,7 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 	fields := probeUntil(node, probes, formGeometry, func(s string) bool {
 		return strings.Contains(s, "xhttp") && fitted(s) && loopDone(s)
 	}, 30*time.Second)
-	c.check(strings.Contains(fields, `"fSecret","fAuthority","fPath","fPadding"`),
+	c.check(strings.Contains(fields, `"fSecret","fAuthority","fPath","fMode"`),
 		"xhttp offers every optional field: %s", fields)
 	c.check(strings.Contains(fields, `"scroll":false`),
 		"the tallest form needs no scrollbar: %s", fields)
@@ -354,7 +355,7 @@ const formGeometry = `
 		const body = document.querySelector(".sheet-body");
 		const last = Math.max(...[...document.querySelectorAll(".sheet-body *")]
 			.map((el) => el.getBoundingClientRect().bottom).filter((y) => y > 0));
-		const shown = ["fSecret","fAuthority","fPath","fPadding"].filter((id) =>
+		const shown = ["fSecret","fAuthority","fPath","fMode"].filter((id) =>
 			getComputedStyle(document.getElementById(id)).display !== "none");
 		return {
 			transport: document.getElementById("fTransport") && document.getElementById("fTransport").value,
