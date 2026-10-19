@@ -8,7 +8,22 @@ permissions:
   contents: write
 
 jobs:
+  # The behavioural gate, ahead of any packaging. A binary that compiles, links
+  # and signs is not evidence that opening a window works: that gap is how the
+  # macOS editor crash - a form window that aborts the process the moment it is
+  # created - went out as a release, because nothing between the commit and the
+  # download ever opened one on a Mac.
+  #
+  # Both platforms gate the publish, so a release is good on both or it is not
+  # published at all. The alternative, shipping the platform that passed and
+  # noting the other in the release text, is what let one platform quietly rot.
+  selftest-windows:
+    uses: ./.github/workflows/selftest-windows.yml
+  selftest-macos:
+    uses: ./.github/workflows/mac-selftest.yml
+
   build-windows:
+    needs: selftest-windows
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -31,6 +46,7 @@ jobs:
           if-no-files-found: error
 
   build-macos:
+    needs: selftest-macos
     # Universal (arm64 + x86_64) .app bundle, ad-hoc signed so it launches on
     # the downloader's Mac after they clear the quarantine flag.
     runs-on: macos-latest
@@ -104,7 +120,7 @@ jobs:
           if-no-files-found: error
 
   release:
-    needs: [build-windows, build-macos]
+    needs: [build-windows, build-macos, selftest-windows, selftest-macos]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
