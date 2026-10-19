@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net"
+	"strconv"
 	"strings"
 	"time"
 
@@ -188,25 +189,29 @@ func (a *App) TestHttp(index int) (string, error) {
 // probeNode starts a throwaway engine with index as its only outbound on random
 // high ports, runs probe through that engine's http inbound, and stops it. The
 // running proxy is untouched: the throwaway engine cannot collide with it and a
-// failing node cannot take the app down. Random ports are retried because a
-// leftover listener from an earlier test may still hold one.
+// failing node cannot take the app down.
+//
+// The port is bound here first, before core is handed it. Windows carves large
+// slices of the dynamic range away for Hyper-V and winnat, and a bind into one
+// of those is a permanent "access forbidden" that core writes to its log and
+// then starts the rest of the engine around: start() returns no error, nothing
+// ever listens, and the user is told their node timed out. Asking the OS for
+// the port turns that into a different port instead of a false verdict about
+// somebody's network.
 func probeNode(st GUIState, index int, probe func(GUIState) (time.Duration, error)) (time.Duration, error) {
 	if index < 0 || index >= len(st.Nodes) {
 		return 0, fmt.Errorf("invalid index: %d", index)
 	}
+	httpPort, socksPort, err := freePortPair()
+	if err != nil {
+		return 0, err
+	}
 	st.ProxyMode = modeProxy
 	st.Active = index
+	st.HttpPort = httpPort
+	st.SocksPort = socksPort
 	var e engine
-	var err error
-	for attempt := 0; attempt < 3; attempt++ {
-		p := 20000 + rand.Intn(40000)
-		st.HttpPort = fmt.Sprintf("%d", p)
-		st.SocksPort = fmt.Sprintf("%d", p+1)
-		if err = e.start(st); err == nil {
-			break
-		}
-	}
-	if err != nil {
+	if err := e.start(st); err != nil {
 		return 0, fmt.Errorf("start test engine: %w", err)
 	}
 	defer e.stop()
@@ -217,6 +222,45 @@ func probeNode(st GUIState, index int, probe func(GUIState) (time.Duration, erro
 		return 0, err
 	}
 	return probe(st)
+}
+
+// freePortPair returns two adjacent loopback ports this machine will let us
+// bind, released again so core can have them. A leftover listener from an
+// earlier probe holding one is as good a reason to move on as a reserved range.
+func freePortPair() (httpPort, socksPort string, err error) {
+	p, err := pickFreePort(20000, 40000, 8)
+	if err != nil {
+		return "", "", err
+	}
+	return strconv.Itoa(p), strconv.Itoa(p + 1), nil
+}
+
+// pickFreePort draws up to attempts ports from [start, start+span) and returns
+// the first that can be bound along with its neighbour.
+func pickFreePort(start, span, attempts int) (int, error) {
+	for i := 0; i < attempts; i++ {
+		if p := start + rand.Intn(span); portsFree(p) {
+			return p, nil
+		}
+	}
+	return 0, fmt.Errorf("no free local port for the test engine")
+}
+
+// portsFree reports whether p and p+1 can both be bound right now. This is the
+// only question worth asking about a Windows excluded port range: a port inside
+// one never binds, however long the caller is willing to wait for it.
+func portsFree(p int) bool {
+	a, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", p))
+	if err != nil {
+		return false
+	}
+	defer a.Close()
+	b, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", p+1))
+	if err != nil {
+		return false
+	}
+	b.Close()
+	return true
 }
 
 // waitListening returns once something accepts connections on the local port,
