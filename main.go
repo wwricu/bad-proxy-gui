@@ -23,18 +23,20 @@ const mainWindowName = "main"
 // out: the status bar, whose fixed parts - two actions and four readouts
 // holding their longest words - need 533 px of *client* width at this machine's
 // scaling, leaving the rest for the message line. Text does not scale evenly, so
-// the same bar needs 546 px on a display at 100%, and the floor is set by that
-// worst case plus the frame, which is 13 px wide at 175% and 16 at 100%. The
-// height floor is one node row plus the bar, so an empty list does not look like
-// a band of bare window under the last item.
+// the same bar needs 546 px on a display at 100%, and the floor is that worst
+// case plus the frame, which is 13 px wide at 175% and 16 at 100%. Setting the
+// floor by the thinner frame instead leaves a machine at 100% with 544 px of
+// client and the facts hanging over the edge, which is what the self-test's
+// width checks look for. The height floor is one node row plus the bar, so an
+// empty list does not look like a band of bare window under the last item.
 //
 // The default matches the floor on purpose: the message line is empty most of
 // the time, so every pixel of slack between the actions and the facts shows as
 // a hole in the middle of the bar.
 const (
-	mainWindowMinW   = 560
-	mainWindowRowH   = 63 // one node row: 13+14+8+14+13+1 px
-	mainWindowBarH   = 36
+	mainWindowMinW = 562 // 546 of bar + the 16 px frame of a display at 100%
+	mainWindowRowH = 63  // one node row: 13+14+8+14+13+1 px
+	mainWindowBarH = 36
 )
 
 // mainWindowSize returns the initial width/height and the minimums. Width is
