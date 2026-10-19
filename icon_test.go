@@ -20,7 +20,7 @@ func TestAppIconKeepsItsMargin(t *testing.T) {
 			"the way every other Dock icon does", ink.h, ink.canvas)
 	}
 	if !ink.cornersClear {
-		t.Error("appicon.png has opaque corners: the rounded tile lost its radius, "+
+		t.Error("appicon.png has opaque corners: the rounded tile lost its radius, " +
 			"so the Dock will show a square")
 	}
 }
@@ -34,11 +34,11 @@ func TestTrayTemplateIsPaddedAndBlack(t *testing.T) {
 			"draw %d pt of it", ink.h, ink.canvas, 22, ink.h*22/ink.canvas)
 	}
 	if !ink.cornersClear {
-		t.Error("traytemplate.png has opaque corners: a template image is a mask, and "+
+		t.Error("traytemplate.png has opaque corners: a template image is a mask, and " +
 			"this would fill the menu bar with a block")
 	}
 	if ink.hasLight {
-		t.Error("traytemplate.png is not flat black: a template image is masked from "+
+		t.Error("traytemplate.png is not flat black: a template image is masked from " +
 			"the alpha channel alone, so anything else is lost in the bar")
 	}
 }
