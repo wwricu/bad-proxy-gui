@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"net"
 	"strings"
 	"time"
 
@@ -209,7 +210,26 @@ func probeNode(st GUIState, index int, probe func(GUIState) (time.Duration, erro
 		return 0, fmt.Errorf("start test engine: %w", err)
 	}
 	defer e.stop()
+	// core binds its inbounds on its own clock, so probing the instant start
+	// returns can find nothing listening yet. That failure says "connection
+	// refused" about a port of our own choosing, which reads as a broken node.
+	if err := waitListening(st.HttpPort); err != nil {
+		return 0, err
+	}
 	return probe(st)
+}
+
+// waitListening returns once something accepts connections on the local port,
+// or fails after a couple of seconds of trying.
+func waitListening(port string) error {
+	for attempt := 0; attempt < 40; attempt++ {
+		conn, err := net.DialTimeout("tcp", "127.0.0.1:"+port, 250*time.Millisecond)
+		if err == nil {
+			return conn.Close()
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	return fmt.Errorf("the test engine never came up on port %s", port)
 }
 
 // restartEngine rebuilds and restarts the embedded core proxy. The state is

@@ -487,6 +487,20 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 		"the reason is kept, on the chip: %q", shown.Reason)
 	c.shot(win, "node-failed")
 
+	// ---- the HTTP test ----
+	// The menu's third word is a different probe: it fetches a page through the
+	// engine instead of dialling the latency check. The node is a dead one, so
+	// what proves the call went down the other path is the URL in the reason.
+	probe(win, probes, `(() => { window.selftest.testHttp(1); return "sent"; })()`)
+	httpReason := probeUntil(win, probes, `
+		(() => {
+			const el = document.querySelector(".node-item:nth-child(2) .node-result");
+			return el ? (el.getAttribute("title") || "") : "";
+		})()`, func(s string) bool { return strings.Contains(s, "canonical.html") }, 90*time.Second)
+	c.check(strings.Contains(httpReason, "canonical.html"),
+		"the HTTP test reports the page it fetched: %s", httpReason)
+	c.shot(win, "node-http")
+
 	// ---- the settings window ----
 	probe(win, probes, `(() => { document.getElementById("gearBtn").click(); return "sent"; })()`)
 	settings := waitForm(a, settingsWindowName, 5*time.Second)

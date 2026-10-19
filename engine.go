@@ -124,11 +124,13 @@ func (n Node) outbound(tag string) core.OutboundConfig {
 // testURL is a well-known connectivity probe returning 204 with no body.
 const testURL = "http://www.gstatic.com/generate_204"
 
-// httpTestURL is a plain-HTTP (no TLS) site that answers 200 with a body. It is
-// the classic captive-portal / connectivity probe: fetching it through the proxy
-// proves not just that the tunnel is up but that ordinary web traffic reaches the
-// open internet and comes back.
-const httpTestURL = "http://neverssl.com/"
+// httpTestURL is a plain-HTTP (no TLS) page that answers 200 with a body. It is
+// the captive-portal probe Mozilla ships in Firefox: fetching it through the
+// proxy proves not just that the tunnel is up but that ordinary web traffic
+// reaches the open internet and comes back. It is used over the famous
+// neverssl.com because that one took 4.2 s from the server against this page's
+// 0.3 s, and a probe that answers slowly reads as a broken node.
+const httpTestURL = "http://detectportal.firefox.com/canonical.html"
 
 // proxyClient routes a request through the local http inbound on the given port,
 // independent of the OS system proxy.
