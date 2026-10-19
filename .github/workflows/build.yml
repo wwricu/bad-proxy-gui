@@ -33,9 +33,12 @@ jobs:
           if-no-files-found: error
 
   macos:
-    # Universal .app bundle. Kept non-blocking in CI so a Windows-only change
-    # never reddens the pipeline on a mac packaging quirk.
-    continue-on-error: true
+    # A compile check, not a package. Building the universal .app on every push
+    # duplicated release.yml's `build-macos` step for step and was the slowest
+    # job in the pipeline, but the thing worth catching on main is that darwin
+    # still builds at all: cgo errors in the tray and main-thread files are
+    # invisible to a Windows machine. The bundle is assembled when a tag asks
+    # for it.
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -48,58 +51,15 @@ jobs:
           curl -fsSL -o rules.dat \
             https://github.com/wwricu/domain-list-community/releases/latest/download/rules.dat \
             || : > rules.dat
-      - name: Build universal binary
+      - name: Compile both mac architectures
         env:
           CGO_ENABLED: "1"
         run: |
           mkdir -p build
           # -tags production is not an optimisation, it is the only build that
           # has a window: without it the Wails backend resolves to a stub whose
-          # CreateApp returns an error, so the binary compiles, links, signs and
-          # then prints "Wails applications will not build without the correct
-          # build tags" and exits - a double-click on the .app does nothing.
-          GOOS=darwin GOARCH=arm64 go build -tags production -trimpath -ldflags "-s -w" -o build/bad-proxy-gui-arm64 .
-          GOOS=darwin GOARCH=amd64 go build -tags production -trimpath -ldflags "-s -w" -o build/bad-proxy-gui-amd64 .
-          lipo -create -output build/bad-proxy-gui-universal build/bad-proxy-gui-arm64 build/bad-proxy-gui-amd64
-      - name: Assemble .app bundle
-        run: |
-          APP="build/Bad Proxy.app"
-          mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-          cp build/bad-proxy-gui-universal "$APP/Contents/MacOS/bad-proxy-gui"
-          # Routing dataset, sealed read-only into the bundle: bundleRulesPath()
-          # reads it in place, and state.json stays in Application Support.
-          curl -fsSL -o "$APP/Contents/Resources/rules.dat" \
-            https://github.com/wwricu/domain-list-community/releases/latest/download/rules.dat
-          # The Dock icon. macOS only reads AppIcon.icns from the bundle - the
-          # png the tray embeds is not a file the Finder looks at, which is why
-          # the app installed with no icon. Build the icns here from that png so
-          # the two can never drift apart.
-          ICONSET=build/AppIcon.iconset
-          rm -rf "$ICONSET"
-          mkdir -p "$ICONSET"
-          for sz in 16 32 128 256 512; do
-            sips -z "$sz" "$sz" build/appicon.png --out "$ICONSET/icon_${sz}x${sz}.png" > /dev/null
-            sips -z "$((sz * 2))" "$((sz * 2))" build/appicon.png --out "$ICONSET/icon_${sz}x${sz}@2x.png" > /dev/null
-          done
-          iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
-          printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>' \
-            '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' \
-            '<plist version="1.0"><dict>' \
-            '<key>CFBundleName</key><string>Bad Proxy</string>' \
-            '<key>CFBundleExecutable</key><string>bad-proxy-gui</string>' \
-            '<key>CFBundleIconFile</key><string>AppIcon</string>' \
-            '<key>CFBundleIdentifier</key><string>icu.wwr.badproxy.gui</string>' \
-            '<key>CFBundlePackageType</key><string>APPL</string>' \
-            '<key>CFBundleShortVersionString</key><string>0.0.1-beta-6</string>' \
-            '<key>CFBundleVersion</key><string>1</string>' \
-            '<key>LSMinimumSystemVersion</key><string>11.0</string>' \
-            '<key>NSHighResolutionCapable</key><true/>' \
-            '<key>LSUIElement</key><false/>' \
-            '</dict></plist>' > "$APP/Contents/Info.plist"
-          codesign --force --deep -s - "$APP"
-          cd build && ditto -c -k --keepParent --sequesterRsrc "Bad Proxy.app" bad-proxy-gui-macos.zip
-      - uses: actions/upload-artifact@v4
-        with:
-          name: bad-proxy-gui-macos
-          path: build/bad-proxy-gui-macos.zip
+          # CreateApp returns an error, so the binary compiles, links and exits -
+          # a double-click on the .app does nothing.
+          GOOS=darwin GOARCH=arm64 go build -tags production -o build/bad-proxy-gui-arm64 .
+          GOOS=darwin GOARCH=amd64 go build -tags production -o build/bad-proxy-gui-amd64 .
 

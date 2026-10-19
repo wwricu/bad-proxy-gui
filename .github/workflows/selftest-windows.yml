@@ -1,22 +1,13 @@
 name: Windows form self-test
 
-# The same harness macOS runs, on the platform it was written for. It is a
-# workflow here rather than a step of Build because release.yml calls it before
-# packaging a tag: a form window that dies on one platform must not be able to
-# reach a release just because the other platform is fine.
+# The same harness macOS runs, on the platform it was written for. It is no
+# longer wired into any pipeline: run it by hand here before cutting a release
+# tag, or with `gh workflow run selftest-windows.yml`.
 #
 # windows-latest has a desktop session and ships the WebView2 runtime, which is
 # the only reason a webview window can be driven in CI at all.
 on:
-  workflow_call:
   workflow_dispatch:
-  push:
-    branches: ['main', 'diag/**']
-    paths:
-      - '*.go'
-      - 'frontend/**'
-      - 'go.mod'
-      - '.github/workflows/selftest-windows.yml'
 
 permissions:
   contents: read
