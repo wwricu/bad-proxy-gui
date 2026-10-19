@@ -187,6 +187,19 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 		}))()`, func(s string) bool { return strings.Contains(s, "11909") }, 30*time.Second)
 	c.check(strings.Contains(state, `"rows":1`), "the list window drew the seeded node: %s", state)
 
+	// ---- the row menu ----
+	// macOS has no native shortcut menu behind this, so the DOM menu is what the
+	// user gets, and the list the Windows build hands its OS menu is read from
+	// the same page. Both are the same three words in the same order.
+	menu := probe(win, probes, `
+		(() => ({
+			items: [...document.querySelectorAll("#ctxMenu .ctx-item")]
+				.map((el) => el.textContent.trim()),
+			native: window.selftest.menuLabels,
+		}))()`)
+	c.check(strings.Contains(menu, `"Edit","Test","Delete"`),
+		"the row menu offers Edit above Test: %s", menu)
+
 	// ---- opening the editor: the step that ships broken ----
 	probe(win, probes, `(() => { document.getElementById("addNodeBtn").click(); return "sent"; })()`)
 	node := waitForm(a, nodeWindowPrefix+"new", 10*time.Second)
@@ -206,6 +219,8 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 	c.check(strings.Contains(fields, `"scroll":false`),
 		"the tallest form needs no scrollbar: %s", fields)
 	c.check(gapOf(fields) <= 32, "no dead band above the editor's buttons: %s", fields)
+	c.check(belowOf(fields) >= 0 && belowOf(fields) <= 24,
+		"the editor's buttons sit at the bottom edge: %s", fields)
 	nw, nh := node.Size()
 	fmt.Printf("  form   node editor: window=%dx%d %s\n", nw, nh, fields)
 	time.Sleep(1200 * time.Millisecond)
@@ -254,6 +269,8 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 	c.check(strings.Contains(prefill, `"scroll":false`),
 		"the settings form needs no scrollbar: %s", prefill)
 	c.check(gapOf(prefill) <= 32, "no dead band above the settings buttons: %s", prefill)
+	c.check(belowOf(prefill) >= 0 && belowOf(prefill) <= 24,
+		"the settings buttons sit at the bottom edge: %s", prefill)
 	sw, sh := settings.Size()
 	fmt.Printf("  form   settings: window=%dx%d %s\n", sw, sh, prefill)
 	time.Sleep(1200 * time.Millisecond)
@@ -311,6 +328,8 @@ const formGeometry = `
 				getComputedStyle(document.getElementById(id)).display !== "none"),
 			scroll: body.scrollHeight > body.clientHeight,
 			gap: Math.round(document.querySelector(".sheet-actions").getBoundingClientRect().top - last),
+			below: Math.round(window.innerHeight -
+				document.querySelector(".sheet-actions").getBoundingClientRect().bottom),
 			inner: [window.innerWidth, window.innerHeight]};
 	})()`
 
@@ -324,6 +343,8 @@ const settingsGeometry = `
 			loginRow: getComputedStyle(document.getElementById("sLoginRow")).display,
 			scroll: body.scrollHeight > body.clientHeight,
 			gap: Math.round(document.querySelector(".sheet-actions").getBoundingClientRect().top - last),
+			below: Math.round(window.innerHeight -
+				document.querySelector(".sheet-actions").getBoundingClientRect().bottom),
 			inner: [window.innerWidth, window.innerHeight]};
 	})()`
 
@@ -333,6 +354,16 @@ func gapOf(probeJSON string) int {
 	}
 	_ = json.Unmarshal([]byte(probeJSON), &out)
 	return out.Gap
+}
+
+// belowOf is the space a form page reports under its own buttons: what the
+// window has left over once the form has taken what it needs.
+func belowOf(probeJSON string) int {
+	var out struct {
+		Below int `json:"below"`
+	}
+	_ = json.Unmarshal([]byte(probeJSON), &out)
+	return out.Below
 }
 
 var probeID atomic.Int64

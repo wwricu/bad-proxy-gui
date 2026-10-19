@@ -24,10 +24,14 @@ const mainWindowName = "main"
 // holding their longest words - need 533 px, leaving the rest for the message
 // line. The height floor is the delete card plus a few rows. The self-test
 // drives these same numbers and reads the widths back.
+//
+// The default is not far above the floor on purpose: the message line is empty
+// most of the time, so every pixel of slack between the actions and the facts
+// shows as a hole in the middle of the bar.
 const (
-	mainWindowWidth  = 800
+	mainWindowWidth  = 640
 	mainWindowHeight = 600
-	mainWindowMinW   = 660
+	mainWindowMinW   = 600
 	mainWindowMinH   = 420
 )
 

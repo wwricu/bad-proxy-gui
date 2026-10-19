@@ -97,8 +97,18 @@ func runFormSelfTest() int {
 		return 1
 	}
 	defer os.RemoveAll(dir)
-	shots, err := os.MkdirTemp("", "bpg-form-selftest-shots-*")
-	if err != nil {
+	// The same environment variable the macOS job answers to, so a run can be
+	// pointed at a directory that survives the process and read afterwards.
+	shots := os.Getenv("BADPROXY_SELFTEST_SHOTS")
+	if shots == "" {
+		var err error
+		shots, err = os.MkdirTemp("", "bpg-form-selftest-shots-*")
+		if err != nil {
+			fmt.Println("shots dir:", err)
+			return 1
+		}
+	}
+	if err := os.MkdirAll(shots, 0o755); err != nil {
 		fmt.Println("shots dir:", err)
 		return 1
 	}
@@ -298,6 +308,8 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 			return {shown: ["fSecret","fAuthority","fPath","fPadding"].filter(shown),
 					scroll: body.scrollHeight > body.clientHeight,
 					gap: Math.round(document.querySelector(".sheet-actions").getBoundingClientRect().top - last),
+					below: Math.round(window.innerHeight -
+						document.querySelector(".sheet-actions").getBoundingClientRect().bottom),
 					inner: [window.innerWidth, window.innerHeight]};
 		})()`)
 	c.check(strings.Contains(fields, `"fSecret","fAuthority","fPath","fPadding"`),
@@ -307,6 +319,11 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 	// The window is the form: the buttons sit just under the last field, so a
 	// fixed-size dialog never shows a band of empty window in its middle.
 	c.check(gapOf(fields) <= 32, "no dead band above the editor's buttons: %s", fields)
+	// The other half of the same rule: a window taller than its form parks the
+	// spare room under the buttons, which is the band of empty window the fixed
+	// size exists to avoid.
+	c.check(belowOf(fields) >= 0 && belowOf(fields) <= 24,
+		"the editor's buttons sit at the bottom edge: %s", fields)
 	fmt.Printf("  form   node editor: %s\n", fields)
 	c.shot(node, "node-add")
 
@@ -378,6 +395,26 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 		func(s string) bool { return s == "2" }, 8*time.Second)
 	c.check(rows == "2", "the closed editor told the list to reread: %q rows", rows)
 
+	// ---- the row menu ----
+	// Windows pops a native Win32 menu, which no probe can read, so the order
+	// lives in two places: the string the page hands that menu and the fallback
+	// menu drawn in the DOM for the other platforms. Both are checked here, and
+	// the fallback is the one a screenshot of this window can show.
+	// The DOM menu is drawn here only as the fallback, so it has to be opened by
+	// hand to be photographed - the same three words the native menu gets.
+	menu := probe(win, probes, `
+		(() => {
+			const items = [...document.querySelectorAll("#ctxMenu .ctx-item")]
+				.map((el) => el.textContent.trim());
+			const m = document.getElementById("ctxMenu");
+			m.style.left = "60px"; m.style.top = "120px"; m.style.display = "block";
+			return {items, native: window.selftest.menuLabels};
+		})()`)
+	c.check(strings.Contains(menu, `"Edit","Test","Delete"`),
+		"the row menu offers Edit above Test: %s", menu)
+	c.shot(win, "row-menu")
+	probe(win, probes, `(() => { document.getElementById("ctxMenu").style.display = "none"; return "sent"; })()`)
+
 	// ---- a failed test ----
 	// gamma.example.invalid does not resolve, so this is a real failure with a
 	// real reason attached. The row is not a place to read a dial error: the
@@ -420,12 +457,16 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 					.map((el) => el.getBoundingClientRect().bottom).filter((y) => y > 0));
 				return Math.round(document.querySelector(".sheet-actions").getBoundingClientRect().top - last);
 			})(),
+			below: Math.round(window.innerHeight -
+				document.querySelector(".sheet-actions").getBoundingClientRect().bottom),
 			inner: [window.innerWidth, window.innerHeight],
 		}))()`, func(s string) bool { return strings.Contains(s, `"ports":"11909/11908"`) }, 10*time.Second)
 	c.check(strings.Contains(prefill, `"mode":"direct"`), "settings opens with the saved mode")
 	c.check(strings.Contains(prefill, `"loginRow":"flex"`), "the start-at-login row is offered on Windows")
 	c.check(strings.Contains(prefill, `"scroll":false`), "the settings form needs no scrollbar: %s", prefill)
 	c.check(gapOf(prefill) <= 32, "no dead band above the settings buttons: %s", prefill)
+	c.check(belowOf(prefill) >= 0 && belowOf(prefill) <= 24,
+		"the settings buttons sit at the bottom edge: %s", prefill)
 	fmt.Printf("  form   settings: %s\n", prefill)
 	time.Sleep(1200 * time.Millisecond)
 	c.shot(settings, "settings")
@@ -716,6 +757,16 @@ func gapOf(probeJSON string) int {
 	}
 	_ = json.Unmarshal([]byte(probeJSON), &out)
 	return out.Gap
+}
+
+// belowOf is the space a form page reports under its own buttons: what the
+// window has left over once the form has taken what it needs.
+func belowOf(probeJSON string) int {
+	var out struct {
+		Below int `json:"below"`
+	}
+	_ = json.Unmarshal([]byte(probeJSON), &out)
+	return out.Below
 }
 
 // waitForm polls until a window with the given name exists and has a native

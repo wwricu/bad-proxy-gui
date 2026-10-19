@@ -71,11 +71,13 @@ body {
 
 .node-name {
     font-weight: 600;
-    font-size: 15px;
+    font-size: 14px;
     /* The two lines are different kinds of information - which node, and where
        it lives - and set shoulder to shoulder they read as one wrapped
-       sentence. */
-    margin-bottom: 4px;
+       sentence. The name is the locator, not the headline: a size over this
+       presses the address line flat against it, and anything under this gap
+       reads as a two-line wrap of one label. */
+    margin-bottom: 8px;
 }
 
 .node-detail {
@@ -288,13 +290,21 @@ body.form-page {
    form scrolls instead of clipping. */
 .form-window .sheet-body {
     flex: 0 1 auto;
+    /* The shared card ends its body flush with the actions, which is right for
+       the confirmation (one sentence, then the buttons) and wrong here: the
+       last field's box butts straight into the divider and the form reads as
+       running out of window. */
+    padding: 16px 16px 14px;
 }
 
+/* One row per field, and the rows are questions the eye has to separate: at
+   8 px a label and the box under the next one stack into a single column of
+   edges. */
 .form-grid {
     display: grid;
     grid-template-columns: 110px 1fr;
     align-items: center;
-    gap: 8px 10px;
+    gap: 14px 10px;
 }
 
 .form-grid label {

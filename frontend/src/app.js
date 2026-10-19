@@ -89,19 +89,24 @@ function resultChip(result) {
 
 // ---- context menu ----
 
+// The row menu's items, in the one order both of its renderings draw them in:
+// the native Win32 menu is built from this list joined by newlines, the DOM
+// fallback in index.html lists the same three.
+const ctxMenuLabels = ['Edit', 'Test', 'Delete'];
+
 // On Windows the backend pops a real Win32 shortcut menu at the cursor; the
 // DOM menu below stays as the fallback for macOS/Linux.
 async function nodeContextMenu(idx, x, y) {
     if (platformInfo && platformInfo.nativeContextMenu) {
         let sel = -1;
         try {
-            sel = await API().ShowContextMenu('Test\nEdit\nDelete');
+            sel = await API().ShowContextMenu(ctxMenuLabels.join('\n'));
         } catch (err) {
             setStatus('Menu failed: ' + err.message);
             return;
         }
-        if (sel === 0) ctxActionTest(idx);
-        else if (sel === 1) editNode(idx);
+        if (sel === 0) editNode(idx);
+        else if (sel === 1) ctxActionTest(idx);
         else if (sel === 2) ctxActionDelete(idx);
         return;
     }
@@ -230,7 +235,13 @@ async function selectNode(idx) {
 // script. Testing and deleting a node both start in a native OS menu, which a
 // script cannot reach, so the two actions behind those items are handed over.
 if (new URLSearchParams(window.location.search).has('selftest')) {
-    window.selftest = { testNode: ctxActionTest, askDelete: ctxActionDelete };
+    window.selftest = {
+        testNode: ctxActionTest,
+        askDelete: ctxActionDelete,
+        // The list the native menu is built from. Its order is a decision, so
+        // the self-test reads it back rather than trust the call site.
+        menuLabels: ctxMenuLabels,
+    };
 }
 
 loadState().catch((err) => setStatus('Load failed: ' + err.message));

@@ -22,16 +22,16 @@ const (
 	formWindowWidth = 460
 
 	// What each form's page needs, in client height: the tallest editor (xhttp,
-	// every optional field on offer) and the settings form take 416 and 312 px.
+	// every optional field on offer) takes 462 px and the settings form 341.
 	// The self-tests measure the result rather than trust the number - a window
-	// too short shows a scrollbar, one too tall shows a band of empty window
-	// above its own buttons, and both fail the run.
+	// too short shows a scrollbar, one too tall leaves a band of its own window
+	// under the buttons, and both fail the run.
 	//
 	// They are the client height, not the window height, because the frame Wails
 	// puts around the webview is not the same question on each platform: see
 	// windowFrameHeight.
-	settingsFormHeight = 312
-	nodeFormHeight     = 416
+	settingsFormHeight = 341
+	nodeFormHeight     = 462
 
 	settingsWindowHeight = settingsFormHeight + windowFrameHeight
 	nodeWindowHeight     = nodeFormHeight + windowFrameHeight
