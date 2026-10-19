@@ -40,12 +40,12 @@ jobs:
           if-no-files-found: error
 
   macos:
-    # A compile check, not a package. Building the universal .app on every push
-    # duplicated release.yml's `build-macos` step for step and was the slowest
-    # job in the pipeline, but the thing worth catching on main is that darwin
-    # still builds at all: cgo errors in the tray and main-thread files are
-    # invisible to a Windows machine. The bundle is assembled when a tag asks
-    # for it.
+    # A compile check, not a package. Assembling the universal .app here built
+    # the same artifact release.yml builds again, and nobody downloaded the push
+    # copy - the timings say packaging was never the cost (2m16 with it, 2m6
+    # without). What is worth keeping on main is the compile itself: cgo errors
+    # in the tray and main-thread files are invisible to a Windows machine, and
+    # one of them shipped as a release that could not build.
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
