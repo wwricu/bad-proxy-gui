@@ -103,7 +103,7 @@ func (a *App) ServiceStartup(context.Context, application.ServiceOptions) error 
 	// inbound. Non-system launches must not touch it: a direct/proxy start
 	// should leave whatever proxy config the user has alone.
 	if st.ProxyMode == config.ModeSystem {
-		if err := platform.SetSystemProxy(st.HttpPort); err != nil {
+		if err := platform.SetSystemProxy(a.store.Dir(), st.HttpPort); err != nil {
 			logf("system proxy not set on relaunch: %v", err)
 		}
 	}
@@ -281,7 +281,7 @@ func (a *App) restartEngine(st config.State) error {
 func (a *App) shutdown() {
 	a.eng.Stop()
 	if a.snapshot().ProxyMode == config.ModeSystem {
-		if err := platform.ClearSystemProxy(); err != nil {
+		if err := platform.ClearSystemProxy(a.store.Dir()); err != nil {
 			logf("system proxy left pointing at a stopped engine: %v", err)
 		}
 	}

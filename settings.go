@@ -55,9 +55,9 @@ func (a *App) ApplySettings(s config.Settings) error {
 	// proxy change never disturbs whatever the user configured themselves.
 	switch {
 	case next.ProxyMode == config.ModeSystem:
-		return platform.SetSystemProxy(next.HttpPort)
+		return platform.SetSystemProxy(a.store.Dir(), next.HttpPort)
 	case prev.ProxyMode == config.ModeSystem:
-		return platform.ClearSystemProxy()
+		return platform.ClearSystemProxy(a.store.Dir())
 	}
 	return nil
 }
