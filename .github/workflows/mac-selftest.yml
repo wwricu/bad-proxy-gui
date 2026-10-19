@@ -14,8 +14,6 @@ permissions:
 jobs:
   selftest:
     runs-on: macos-latest
-    env:
-      SHOTS: ${{ runner.temp }}/shots
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -30,22 +28,25 @@ jobs:
       - name: Drive the form windows
         env:
           BADPROXY_GUI_SELFTEST: "1"
-          BADPROXY_SELFTEST_SHOTS: ${{ runner.temp }}/shots
-        # pipefail: the harness result must not be hidden by tee's own exit code.
+        # RUNNER_TEMP is only an environment variable, so the shots directory is
+        # exported from here rather than from a workflow expression. pipefail: the
+        # harness result must not be hidden by tee's own exit code.
         run: |
           set -o pipefail
-          mkdir -p "$SHOTS"
+          export BADPROXY_SELFTEST_SHOTS="$RUNNER_TEMP/shots"
+          mkdir -p "$BADPROXY_SELFTEST_SHOTS"
           go test -tags production -count=1 -v -timeout 15m . \
-            2>&1 | tee "$SHOTS/selftest.log"
+            2>&1 | tee "$BADPROXY_SELFTEST_SHOTS/selftest.log"
       - name: Collect crash reports
         if: always()
         # An NSException aborts the process and the reason lands in stderr and in
         # the crash report, neither of which the job log shows by itself.
         run: |
-          mkdir -p "$SHOTS/crashreports"
-          cp -a "$HOME/Library/Logs/DiagnosticReports/." "$SHOTS/crashreports" 2>/dev/null || true
-          echo "=== crash reports ==="; ls -la "$SHOTS/crashreports"
-          echo "=== harness log ==="; tail -n 150 "$SHOTS/selftest.log" || true
+          shots="$RUNNER_TEMP/shots"
+          mkdir -p "$shots/crashreports"
+          cp -a "$HOME/Library/Logs/DiagnosticReports/." "$shots/crashreports" 2>/dev/null || true
+          echo "=== crash reports ==="; ls -la "$shots/crashreports"
+          echo "=== harness log ==="; tail -n 150 "$shots/selftest.log" || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
