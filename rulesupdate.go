@@ -26,15 +26,10 @@ const (
 	rulesDownloadTimeout = 60 * time.Second
 )
 
-// UpdateRules downloads the newest routing dataset and swaps it in without ever
-// leaving the app holding a half-written or garbage rules.dat. The safety comes
-// from three steps: land the bytes in a temp file beside the target, validate
-// them whole, then rename over the target in one atomic step. A failure at any
-// point before the rename leaves the running dataset untouched, so a bad
-// download cannot break routing - the worst case is "nothing changed".
-//
-// It is a bound method called by the settings window's Update button. The
-// returned string is the success line shown to the user.
+// UpdateRules downloads the newest routing dataset, swaps it in and restarts the
+// engine so the new lists take effect. It is a bound method called by the
+// settings window's Update button; the returned string is the success line shown
+// to the user.
 func (a *App) UpdateRules() (string, error) {
 	// Always write into the data dir: ensureRulesDat reads that path first, so a
 	// file installed here takes precedence over the bundled copy for as long as
@@ -43,33 +38,55 @@ func (a *App) UpdateRules() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("no writable data directory: %w", err)
 	}
-	target := filepath.Join(dir, "rules.dat")
+	n, err := installRulesDat(rulesDataURL, filepath.Join(dir, "rules.dat"))
+	if err != nil {
+		return "", err
+	}
+	// The core reads the named lists when the engine starts, so the new rules
+	// only bite after a restart. This is the same cheap restart every other
+	// setting change already costs.
+	if err := a.restartEngine(); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("Rules updated (%d KB).", n/1024), nil
+}
+
+// installRulesDat fetches the dataset at url and swaps it into target, leaving
+// the previous file in place unless the whole download checks out. It reports
+// how many bytes went in.
+//
+// The safety comes from the order: land the bytes in a temp file beside the
+// target, validate them whole, then rename over the target in one step. A
+// failure anywhere before the rename leaves the running dataset untouched, so a
+// bad download cannot break routing - the worst case is "nothing changed".
+func installRulesDat(url, target string) (int, error) {
+	// Same directory as the target, so the rename is atomic rather than a
+	// copy-and-delete that could be interrupted halfway.
+	dir := filepath.Dir(target)
 
 	client := &http.Client{Timeout: rulesDownloadTimeout}
-	resp, err := client.Get(rulesDataURL)
+	resp, err := client.Get(url)
 	if err != nil {
-		return "", fmt.Errorf("download failed: %w", err)
+		return 0, fmt.Errorf("download failed: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("server returned %s", resp.Status)
+		return 0, fmt.Errorf("server returned %s", resp.Status)
 	}
 
 	// Buffer the whole body before touching disk: validation needs every byte,
 	// and a truncated stream must never reach the rename.
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxRulesBytes))
 	if err != nil {
-		return "", fmt.Errorf("read failed: %w", err)
+		return 0, fmt.Errorf("read failed: %w", err)
 	}
 	if err := validateRulesDat(body); err != nil {
-		return "", err
+		return 0, err
 	}
 
-	// Same directory as the target, so the rename below is atomic rather than a
-	// copy-and-delete that could be interrupted halfway.
 	tmp, err := os.CreateTemp(dir, "rules-*.tmp")
 	if err != nil {
-		return "", fmt.Errorf("could not stage the download: %w", err)
+		return 0, fmt.Errorf("could not stage the download: %w", err)
 	}
 	tmpName := tmp.Name()
 	// Cleared on every path except the one where the rename consumes it; after a
@@ -78,28 +95,21 @@ func (a *App) UpdateRules() (string, error) {
 
 	if _, err := tmp.Write(body); err != nil {
 		tmp.Close()
-		return "", fmt.Errorf("write failed: %w", err)
+		return 0, fmt.Errorf("write failed: %w", err)
 	}
 	if err := tmp.Sync(); err != nil {
 		tmp.Close()
-		return "", fmt.Errorf("flush failed: %w", err)
+		return 0, fmt.Errorf("flush failed: %w", err)
 	}
 	if err := tmp.Close(); err != nil {
-		return "", fmt.Errorf("close failed: %w", err)
+		return 0, fmt.Errorf("close failed: %w", err)
 	}
 	// rename(2) on Unix and MoveFileEx with REPLACE_EXISTING on Windows: either
 	// the old dataset or the new one is present, never a mixture.
 	if err := os.Rename(tmpName, target); err != nil {
-		return "", fmt.Errorf("install failed: %w", err)
+		return 0, fmt.Errorf("install failed: %w", err)
 	}
-
-	// The core reads the named lists when the engine starts, so the new rules
-	// only bite after a restart. This is the same cheap restart every other
-	// setting change already costs.
-	if err := a.restartEngine(); err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("Rules updated (%d KB).", len(body)/1024), nil
+	return len(body), nil
 }
 
 // validateRulesDat rejects anything that is not plausibly a full compiled
