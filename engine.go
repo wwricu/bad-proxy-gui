@@ -25,10 +25,12 @@ func (e *engine) start(s GUIState) error {
 	}
 	cfg, err := buildConfig(s)
 	if err != nil {
+		println("buildConfig error:", err.Error())
 		return err
 	}
 	p, err := core.New(cfg)
 	if err != nil {
+		println("core.New error:", err.Error())
 		return err
 	}
 	p.Start()

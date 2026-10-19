@@ -37,6 +37,7 @@ func (a *App) ServiceStartup(context.Context, application.ServiceOptions) error 
 	// The engine runs from launch: direct mode is always buildable, so the
 	// local inbounds answer immediately and mode switches are cheap restarts.
 	if err := a.eng.start(a.st); err != nil {
+		println("Engine start failed:", err.Error())
 		return nil
 	}
 	// Relaunching in system mode re-points the OS proxy at the (now-running)
