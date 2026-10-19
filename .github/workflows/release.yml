@@ -123,10 +123,19 @@ jobs:
     needs: [build-windows, build-macos, selftest-windows, selftest-macos]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+      # By name, not merge-multiple over everything: the two self-test jobs
+      # above upload their screenshots and harness log as artifacts too, and a
+      # blind download turned those into release assets - the first gated
+      # publish shipped 01-node-add.png and selftest.log to the download page.
       - uses: actions/download-artifact@v4
         with:
+          name: windows
           path: dist
-          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos
+          path: dist
       - name: Publish GitHub Release
         # Both softprops/action-gh-release ("Too many retries.") and gh CLI
         # (exit 1, logs unseeable) failed publishing blind. Talk to the REST
@@ -144,9 +153,14 @@ jobs:
             echo "removing stale release $stale"
             curl -s -X DELETE -H "Authorization: $AUTH" "$API/releases/$stale" > /dev/null
           fi
+          # The download page says what the build does and what it still cannot
+          # do, from RELEASE_NOTES.md, rather than leaving GitHub to invent a
+          # changelog out of commit subjects.
+          payload=$(jq -n --arg tag "$GITHUB_REF_NAME" --arg sha "$GITHUB_SHA" \
+            --rawfile notes "$GITHUB_WORKSPACE/RELEASE_NOTES.md" \
+            '{tag_name: $tag, name: $tag, prerelease: true, target_commitish: $sha, body: $notes}')
           resp=$(curl -s -X POST -H "Authorization: $AUTH" -H "Accept: application/vnd.github+json" \
-            -d "{\"tag_name\":\"$GITHUB_REF_NAME\",\"name\":\"$GITHUB_REF_NAME\",\"prerelease\":true,\"generate_release_notes\":true,\"target_commitish\":\"$GITHUB_SHA\"}" \
-            "$API/releases")
+            -d "$payload" "$API/releases")
           rid=$(echo "$resp" | jq -r '.id // empty')
           if [ -z "$rid" ]; then
             echo "release create failed:" >&2
