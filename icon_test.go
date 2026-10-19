@@ -27,11 +27,11 @@ func TestAppIconKeepsItsMargin(t *testing.T) {
 
 func TestTrayTemplateIsPaddedAndBlack(t *testing.T) {
 	ink := darkInk(t, "build/traytemplate.png")
-	// AppKit stretches the whole square to the bar's thickness, so this ratio is
-	// the glyph's size in the menu bar.
+	// tray_darwin.m draws this square canvas 18 pt on a side, so this ratio
+	// times 18 is the height the letter reaches in the bar.
 	if ink.h < ink.canvas*50/100 || ink.h > ink.canvas*70/100 {
-		t.Errorf("the glyph is %d of a %d canvas: the bar is %d pt tall, so it would "+
-			"draw %d pt of it", ink.h, ink.canvas, 22, ink.h*22/ink.canvas)
+		t.Errorf("the glyph is %d of a %d canvas: the image is drawn 18 pt square, so "+
+			"it would be %d pt tall in the bar", ink.h, ink.canvas, ink.h*18/ink.canvas)
 	}
 	if !ink.cornersClear {
 		t.Error("traytemplate.png has opaque corners: a template image is a mask, and " +

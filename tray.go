@@ -1,3 +1,5 @@
+//go:build !darwin
+
 package main
 
 import (
@@ -9,6 +11,9 @@ import (
 //
 // A left click (or a double click) reopens the window; what the right click
 // does is platform policy, expressed by trayHasMenu.
+//
+// macOS has its own version in tray_darwin.go: the item there has to be AppKit's
+// own so System Settings can manage it.
 func setupTray(a *App, wails *application.App) {
 	if !hasTray || (trayCanHide && a.st.HideTray) {
 		return
@@ -30,9 +35,9 @@ func setupTray(a *App, wails *application.App) {
 		menu.Add("Quit").OnClick(func(*application.Context) { a.quit() })
 		tray.SetMenu(menu)
 	} else {
-		// macOS draws a menu for a right click as soon as the item has one. The
-		// signed-off menu-bar look has no menu at all, and Quit lives in the app
-		// menu (Cmd+Q), so the right click is handled by doing nothing.
+		// A tray that is given a menu shows it on right click whether or not
+		// anyone asked for one, so the platforms that want no menu say so by
+		// having nothing in it.
 		tray.SetMenu(nil)
 		tray.OnRightClick(func() {})
 	}

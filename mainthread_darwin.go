@@ -51,3 +51,17 @@ func runOnMainThread(fn func()) {
 	C.badproxyRunOnMain()
 	<-done
 }
+
+// postToMainThread queues fn for the main run loop and returns without waiting.
+//
+// This is what an AppKit action handler needs: cgo parks the thread that called
+// into Go until the exported function returns, and that thread is the main one,
+// so a task queued from there and waited on there would be waiting behind the
+// very call it is standing inside.
+func postToMainThread(fn func()) {
+	select {
+	case mainQueue <- fn:
+		C.badproxyRunOnMain()
+	default:
+	}
+}
