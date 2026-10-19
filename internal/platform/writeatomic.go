@@ -6,8 +6,8 @@ import (
 )
 
 // WriteAtomic puts data at path so that a reader never sees half of a file: the
-// bytes go into a temporary file in the same folder and are renamed over the
-// target once all of them are written and closed.
+// bytes go into a temporary file in the same folder, reach the disk, and are
+// renamed over the target once all of them are there.
 //
 // The same folder is what makes it work - a rename cannot cross a volume - and
 // the rename is RenameOver because the file being replaced may be held open for
@@ -26,6 +26,14 @@ func WriteAtomic(path string, data []byte) error {
 	name := tmp.Name()
 	defer os.Remove(name) // nothing to remove once the rename has moved it
 	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	// The bytes have to be on the disk before the directory entry is swapped,
+	// or a rename that survives a power cut moves an empty file into place. The
+	// promise is a full file or the previous one, and without the sync it only
+	// holds for a process that crashes.
+	if err := tmp.Sync(); err != nil {
 		_ = tmp.Close()
 		return err
 	}

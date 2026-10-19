@@ -40,7 +40,11 @@ func ensureRulesDat() string {
 	if bundle := platform.BundleRulesPath(); bundle != "" {
 		return bundle
 	}
-	if err := os.WriteFile(path, rulesDat, 0o600); err != nil {
+	// Through WriteAtomic like everything else the app persists: a dataset cut
+	// short by a full disk or a crash is a routing table that loads and answers
+	// for far fewer domains than it looks like it does.
+	if err := platform.WriteAtomic(path, rulesDat); err != nil {
+		logf("the bundled rules dataset could not be written: %v", err)
 		return ""
 	}
 	return path
