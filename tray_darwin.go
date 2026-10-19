@@ -49,13 +49,14 @@ func createNativeTray(imgData []byte) bool {
 		C.int(len(imgData))) != nil
 }
 
-// setupTray is the darwin counterpart of the one in tray.go. The second
+// setupTray is the darwin counterpart of the one in tray_windows.go. The second
 // parameter is ignored - it exists only to match that signature at the call
 // site in main.go.
+//
+// There is no HideTray check here: the menu-bar item is the only reopen
+// affordance once the window is closed and the Dock icon is dropped, so it
+// cannot be hidden. The user turns it off in System Settings instead.
 func setupTray(a *App, _ interface{}) {
-	if !hasTray || (trayCanHide && a.st.HideTray) {
-		return
-	}
 	trayClick = a.showWindow
 	if !createNativeTray(trayTemplateBytes) {
 		trayClick = nil

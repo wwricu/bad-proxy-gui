@@ -1,13 +1,12 @@
-//go:build !windows
+//go:build darwin
 
 package main
 
 import "github.com/wailsapp/wails/v3/pkg/application"
 
-// flashForAttention is the platform's own attention signal: on macOS Wails maps
-// it to requestUserAttention, which bounces the Dock icon once - the AppKit
-// answer to "the window you want is already open, here it is". Linux has no
-// equivalent, so the raise in the caller is all the user gets.
+// flashForAttention is AppKit's own attention signal: Wails maps it to
+// requestUserAttention, which bounces the Dock icon once - the answer to "the
+// window you want is already open, here it is".
 //
 // AppKit has no public window shake. The one macOS does ship belongs to the
 // sheet machinery (presenting a second sheet on a window that already has one

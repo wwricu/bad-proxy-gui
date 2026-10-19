@@ -2,20 +2,11 @@
 
 package main
 
-// hasTray reports that a menu-bar item is available. On macOS it is the only
-// reopen affordance once the window is closed and the Dock icon is dropped,
-// so it cannot be hidden.
-const hasTray = true
-
+// trayCanHide is false on macOS: the menu-bar item is the only reopen
+// affordance once the window is closed and the Dock icon is dropped, so the
+// settings window hides the toggle rather than offering a control that cannot
+// take effect.
 const trayCanHide = false
-
-// trayTitle is empty on macOS: AppKit renders a status item's title as text
-// next to the icon, and the menu-bar item is signed off as icon-only.
-const trayTitle = ""
-
-// trayHasMenu is false on macOS: the menu-bar item is signed off as icon-only
-// with no right-click menu. Quit lives in the app menu (Cmd+Q).
-const trayHasMenu = false
 
 // windowFrameHeight is 0 on macOS: Wails hands the window's Height straight to
 // -[NSWindow initWithContentRect:...], so the number is already the webview's
