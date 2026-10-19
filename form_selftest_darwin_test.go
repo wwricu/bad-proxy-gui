@@ -181,15 +181,16 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 	// The second webview has to load its own page and reach the same bindings.
 	// If the process dies here, the crash is in the second window's asset load
 	// rather than in its creation.
-	fields := probeUntil(node, probes, `
-		(() => ({
-			transport: document.getElementById("fTransport") && document.getElementById("fTransport").value,
-			shown: ["fSecret","fAuthority","fPath","fPadding"].filter((id) =>
-				getComputedStyle(document.getElementById(id)).display !== "none"),
-			inner: [window.innerWidth, window.innerHeight],
-		}))()`, func(s string) bool { return strings.Contains(s, "xhttp") }, 30*time.Second)
+	fields := probeUntil(node, probes, formGeometry, func(s string) bool { return strings.Contains(s, "xhttp") }, 30*time.Second)
 	c.check(strings.Contains(fields, `"fSecret","fAuthority","fPath","fPadding"`),
 		"xhttp offers every optional field: %s", fields)
+	c.check(strings.Contains(fields, `"scroll":false`),
+		"the tallest form needs no scrollbar: %s", fields)
+	c.check(gapOf(fields) <= 32, "no dead band above the editor's buttons: %s", fields)
+	nw, nh := node.Size()
+	fmt.Printf("  form   node editor: window=%dx%d %s\n", nw, nh, fields)
+	time.Sleep(1200 * time.Millisecond)
+	c.shot("node-add")
 
 	// An owned window must be on screen the moment it exists, and it must not
 	// have been shoved somewhere else by the ownership call.
@@ -226,10 +227,19 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 		return
 	}
 	c.ok("the gear opened the settings window")
-	draft := probeUntil(settings, probes, `
-		(() => (["sHttpPort","sSocksPort"].map(id => document.getElementById(id).value).join("/")))()`,
-		func(s string) bool { return s == "11909/11908" }, 30*time.Second)
-	c.check(draft == "11909/11908", "the settings form filled itself from the draft: %q", draft)
+	prefill := probeUntil(settings, probes, settingsGeometry,
+		func(s string) bool { return strings.Contains(s, `"ports":"11909/11908"`) }, 30*time.Second)
+	c.check(strings.Contains(prefill, `"ports":"11909/11908"`),
+		"the settings form filled itself from the draft: %s", prefill)
+	c.check(strings.Contains(prefill, `"loginRow":"flex"`),
+		"the start-at-login row is offered on macOS: %s", prefill)
+	c.check(strings.Contains(prefill, `"scroll":false`),
+		"the settings form needs no scrollbar: %s", prefill)
+	c.check(gapOf(prefill) <= 32, "no dead band above the settings buttons: %s", prefill)
+	sw, sh := settings.Size()
+	fmt.Printf("  form   settings: window=%dx%d %s\n", sw, sh, prefill)
+	time.Sleep(1200 * time.Millisecond)
+	c.shot("settings")
 	probe(settings, probes, `(() => { document.getElementById("settingsCancel").click(); return "sent"; })()`)
 	c.check(waitClosed(a, settingsWindowName, 10*time.Second), "Cancel closes the settings window")
 
@@ -258,6 +268,47 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 }
 
 // ---- talking to the page ----
+
+// The two forms are fixed-size windows, so the page has to fit them exactly:
+// too tall and a scrollbar appears, too short and the flex body swallows the
+// spare room as a band of empty window between the last field and the buttons.
+// Both are read from the DOM rather than from a screenshot, and the window's own
+// size is printed beside them because the frame that Wails adds is what differs
+// between an NSWindow title bar and a Win32 caption.
+const formGeometry = `
+	(() => {
+		const body = document.querySelector(".sheet-body");
+		const last = Math.max(...[...document.querySelectorAll(".sheet-body *")]
+			.map((el) => el.getBoundingClientRect().bottom).filter((y) => y > 0));
+		return {
+			transport: document.getElementById("fTransport") && document.getElementById("fTransport").value,
+			shown: ["fSecret","fAuthority","fPath","fPadding"].filter((id) =>
+				getComputedStyle(document.getElementById(id)).display !== "none"),
+			scroll: body.scrollHeight > body.clientHeight,
+			gap: Math.round(document.querySelector(".sheet-actions").getBoundingClientRect().top - last),
+			inner: [window.innerWidth, window.innerHeight]};
+	})()`
+
+const settingsGeometry = `
+	(() => {
+		const body = document.querySelector(".sheet-body");
+		const last = Math.max(...[...document.querySelectorAll(".sheet-body *")]
+			.map((el) => el.getBoundingClientRect().bottom).filter((y) => y > 0));
+		return {
+			ports: ["sHttpPort","sSocksPort"].map(id => document.getElementById(id).value).join("/"),
+			loginRow: getComputedStyle(document.getElementById("sLoginRow")).display,
+			scroll: body.scrollHeight > body.clientHeight,
+			gap: Math.round(document.querySelector(".sheet-actions").getBoundingClientRect().top - last),
+			inner: [window.innerWidth, window.innerHeight]};
+	})()`
+
+func gapOf(probeJSON string) int {
+	var out struct {
+		Gap int `json:"gap"`
+	}
+	_ = json.Unmarshal([]byte(probeJSON), &out)
+	return out.Gap
+}
 
 var probeID atomic.Int64
 
