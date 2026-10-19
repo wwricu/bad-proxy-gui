@@ -21,7 +21,8 @@ const trayHasMenu = false
 const windowFrameHeight = 0
 
 // The form heights are the macOS numbers: nothing has measured them here, and
-// like the frame above, they are only what lets the window code compile.
+// like the frame above, they are only what a form window opens at before the
+// page asks for the height it needs.
 const (
 	nodeFormHeight     = 462
 	settingsFormHeight = 302

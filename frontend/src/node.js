@@ -1,4 +1,5 @@
 import { API } from './bridge.js';
+import { fitFormWindow } from './formfit.js';
 import { Window } from "/wails/runtime.js";
 
 // The editor for one node, in a window of its own. Which node is in the URL:
@@ -13,6 +14,9 @@ const editIdx = (() => {
 
 function setFormMsg(text) {
     document.getElementById('fMsg').textContent = text || '';
+    // The line is part of the form: a window sized for the fields alone would
+    // show the refusal by squeezing them.
+    fitFormWindow();
 }
 
 // Mirrors the backend's visibleNodeFields: which optional fields apply.
@@ -28,12 +32,17 @@ function setRow(labelId, inputId, visible) {
     document.getElementById(inputId).style.display = visible ? 'block' : 'none';
 }
 
+// The window is sized to the form, so it has to be asked again whenever the
+// form changes size. A hidden row left the window as tall as the tallest form:
+// the fields flow from the top, so the buttons slid up and a band of bare window
+// opened under them.
 function applyFieldVisibility() {
     const f = visibleFields(document.getElementById('fProtocol').value, document.getElementById('fTransport').value);
     setRow('lSecret', 'fSecret', f.secret);
     setRow('lAuthority', 'fAuthority', f.authority);
     setRow('lPath', 'fPath', f.path);
     setRow('lPadding', 'fPadding', f.padding);
+    fitFormWindow();
 }
 
 async function init() {

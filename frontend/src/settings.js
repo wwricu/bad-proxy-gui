@@ -1,4 +1,5 @@
 import { API } from './bridge.js';
+import { fitFormWindow } from './formfit.js';
 import { Window } from "/wails/runtime.js";
 
 // The settings window is the only settings UI on every platform. Nothing here
@@ -13,6 +14,7 @@ function setFormMsg(text, busy) {
     const el = document.getElementById('sMsg');
     el.textContent = text || '';
     el.classList.toggle('busy', !!busy);
+    fitFormWindow();
 }
 
 async function init() {
@@ -35,6 +37,9 @@ async function init() {
     }
 
     document.getElementById('sHttpPort').focus();
+    // Which rows the OS offers is only known after the platform read, so this is
+    // the first moment the page knows its own height.
+    fitFormWindow();
 }
 
 document.getElementById('settingsCancel').onclick = () => Window.Close();

@@ -121,6 +121,23 @@ func (a *App) anyFormWindow() application.Window {
 	return nil
 }
 
+// FitFormWindow resizes the open form window to the page height the frontend
+// just measured.
+//
+// The split is deliberate: the page knows how tall its own fields are, and only
+// this side knows what the frame costs on this platform, so the number crossing
+// the boundary is a client height and the frame is added here - the same sum
+// openFormWindow starts from. Without it, hiding a row leaves the window as tall
+// as the tallest form and the buttons drift up off the bottom edge, stranding a
+// band of empty window under them.
+func (a *App) FitFormWindow(clientHeight int) {
+	form := a.anyFormWindow()
+	if form == nil || clientHeight <= 0 {
+		return
+	}
+	form.SetSize(formWindowWidth, clientHeight+windowFrameHeight)
+}
+
 // hideFormWindow and showFormWindow move the form with the list it belongs to.
 // A window hidden by the app is not taken out of the window list, so the form is
 // still found again on the way back - which matters, because it is the one

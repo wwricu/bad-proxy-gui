@@ -299,30 +299,52 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 	// page is loaded (the probe above answered) but the compositor has not drawn
 	// a frame yet, so give it one before asking for the pixels.
 	time.Sleep(1500 * time.Millisecond)
-	fields := probe(node, probes, `
+	// One shape for every read of the editor: which optional rows are on screen,
+	// whether the page still fits, how much room a scrollbar has taken, and how
+	// much window is left above the buttons and under them. The window is meant
+	// to be the form, so those margins and that room are the whole test.
+	const formShape = `
 		(() => {
 			const shown = (id) => getComputedStyle(document.getElementById(id)).display !== "none";
 			const body = document.querySelector(".sheet-body");
+			const actions = document.querySelector(".sheet-actions").getBoundingClientRect();
 			const last = Math.max(...[...document.querySelectorAll(".sheet-body *")]
 				.map((el) => el.getBoundingClientRect().bottom).filter((y) => y > 0));
-			return {shown: ["fSecret","fAuthority","fPath","fPadding"].filter(shown),
+			const rows = ["fSecret","fAuthority","fPath","fPadding"].filter(shown);
+			return {rows, n: rows.length,
 					scroll: body.scrollHeight > body.clientHeight,
-					gap: Math.round(document.querySelector(".sheet-actions").getBoundingClientRect().top - last),
-					below: Math.round(window.innerHeight -
-						document.querySelector(".sheet-actions").getBoundingClientRect().bottom),
+					gutter: body.offsetWidth - body.clientWidth,
+					gap: Math.round(actions.top - last),
+					below: Math.round(window.innerHeight - actions.bottom),
 					inner: [window.innerWidth, window.innerHeight]};
-		})()`)
-	c.check(strings.Contains(fields, `"fSecret","fAuthority","fPath","fPadding"`),
+		})()`
+	setTransport := func(v string) string {
+		return `(() => { const s = document.getElementById("fTransport"); s.value = "` + v +
+			`"; s.dispatchEvent(new Event("change")); return "sent"; })()`
+	}
+	// The fit is a round trip through a binding, so read until the window has
+	// caught up with the page rather than trusting the first answer.
+	fields := probeUntil(node, probes, formShape, func(s string) bool {
+		return strings.Contains(s, `"n":4`) && belowOf(s) >= 0 && belowOf(s) <= 12
+	}, 8*time.Second)
+	c.check(strings.Contains(fields, `"rows":["fSecret","fAuthority","fPath","fPadding"]`),
 		"xhttp offers every optional field: %s", fields)
 	c.check(strings.Contains(fields, `"scroll":false`),
 		"the tallest form needs no scrollbar: %s", fields)
+	// The pixel-level version of the same promise. A box one fraction too short
+	// rounds scrollHeight and clientHeight to the same number, so the check above
+	// passes while the browser has already taken a scrollbar; the space the bar
+	// reserves is the one thing that cannot hide.
+	c.check(gutterOf(fields) == 0,
+		"the fitted editor keeps no scrollbar gutter: %s", fields)
 	// The window is the form: the buttons sit just under the last field, so a
 	// fixed-size dialog never shows a band of empty window in its middle.
 	c.check(gapOf(fields) <= 32, "no dead band above the editor's buttons: %s", fields)
 	// The other half of the same rule: a window taller than its form parks the
 	// spare room under the buttons, which is the band of empty window the fixed
-	// size exists to avoid.
-	c.check(belowOf(fields) >= 0 && belowOf(fields) <= 24,
+	// size exists to avoid. The form asks for the height it needs, so anything
+	// more than a pixel of rounding here is a window that did not listen.
+	c.check(belowOf(fields) >= 0 && belowOf(fields) <= 12,
 		"the editor's buttons sit at the bottom edge: %s", fields)
 	fmt.Printf("  form   node editor: %s\n", fields)
 	c.shot(node, "node-add")
@@ -348,6 +370,32 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 	c.check(strings.Contains(trimmed, `"hidden":["fSecret"]`), "socks hides only the secret: %s", trimmed)
 	c.check(strings.Contains(trimmed, `"fits":true`) && strings.Contains(trimmed, `"scroll":false`),
 		"a shorter form keeps its buttons inside the window: %s", trimmed)
+
+	// ---- the form that changes while it is open ----
+	// tls drops three rows at once. The window was sized for xhttp, so unless it
+	// follows the fields the buttons slide up off the bottom edge and leave a
+	// band of bare window under them - the failure a fixed form height cannot
+	// see coming, because the form is only tallest when it first opens.
+	probe(node, probes, setTransport("tls"))
+	shrunk := probeUntil(node, probes, formShape, func(s string) bool {
+		return strings.Contains(s, `"n":2`) && belowOf(s) >= 0 && belowOf(s) <= 12
+	}, 8*time.Second)
+	c.check(strings.Contains(shrunk, `"scroll":false`),
+		"the short form needs no scrollbar: %s", shrunk)
+	c.check(heightOf(shrunk) > 0 && heightOf(shrunk) < heightOf(fields),
+		"the window shrank with its fields: %s after %s", shrunk, fields)
+	c.check(belowOf(shrunk) >= 0 && belowOf(shrunk) <= 12,
+		"the short form's buttons hold the bottom edge: %s", shrunk)
+	c.shot(node, "node-tls")
+
+	// Growing back is the same promise in the other direction, and waiting for it
+	// here also settles the resize the socks pass started before the next probe.
+	probe(node, probes, setTransport("xhttp"))
+	grown := probeUntil(node, probes, formShape, func(s string) bool {
+		return strings.Contains(s, `"n":4`) && heightOf(s) == heightOf(fields)
+	}, 8*time.Second)
+	c.check(heightOf(grown) == heightOf(fields),
+		"putting the rows back puts the window back: %s vs %s", grown, fields)
 
 	// The validation is synchronous, so the click and the read are one pass.
 	refusal := probe(node, probes, `
@@ -460,12 +508,14 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 			below: Math.round(window.innerHeight -
 				document.querySelector(".sheet-actions").getBoundingClientRect().bottom),
 			inner: [window.innerWidth, window.innerHeight],
-		}))()`, func(s string) bool { return strings.Contains(s, `"ports":"11909/11908"`) }, 10*time.Second)
+		}))()`, func(s string) bool {
+		return strings.Contains(s, `"ports":"11909/11908"`) && belowOf(s) >= 0 && belowOf(s) <= 12
+	}, 10*time.Second)
 	c.check(strings.Contains(prefill, `"mode":"direct"`), "settings opens with the saved mode")
 	c.check(strings.Contains(prefill, `"loginRow":"flex"`), "the start-at-login row is offered on Windows")
 	c.check(strings.Contains(prefill, `"scroll":false`), "the settings form needs no scrollbar: %s", prefill)
 	c.check(gapOf(prefill) <= 32, "no dead band above the settings buttons: %s", prefill)
-	c.check(belowOf(prefill) >= 0 && belowOf(prefill) <= 24,
+	c.check(belowOf(prefill) >= 0 && belowOf(prefill) <= 12,
 		"the settings buttons sit at the bottom edge: %s", prefill)
 	fmt.Printf("  form   settings: %s\n", prefill)
 	time.Sleep(1200 * time.Millisecond)
@@ -767,6 +817,27 @@ func belowOf(probeJSON string) int {
 	}
 	_ = json.Unmarshal([]byte(probeJSON), &out)
 	return out.Below
+}
+
+// heightOf is the client height the page reports, which is the window's side of
+// the bargain: a form that lost three rows has to lose the window's three rows
+// too, or the buttons end up floating above bare window.
+func heightOf(probeJSON string) int {
+	var out struct {
+		Inner [2]int `json:"inner"`
+	}
+	_ = json.Unmarshal([]byte(probeJSON), &out)
+	return out.Inner[1]
+}
+
+// gutterOf is how much of the form's width a scrollbar has taken. Zero is the
+// only answer that means the window is as wide as its form.
+func gutterOf(probeJSON string) int {
+	var out struct {
+		Gutter int `json:"gutter"`
+	}
+	_ = json.Unmarshal([]byte(probeJSON), &out)
+	return out.Gutter
 }
 
 // waitForm polls until a window with the given name exists and has a native

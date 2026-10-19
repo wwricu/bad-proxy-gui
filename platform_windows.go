@@ -23,7 +23,8 @@ const trayHasMenu = true
 // 13 px of width to the frame.
 const windowFrameHeight = 36
 
-// The two forms' client heights, measured on this platform.
+// The two forms' client heights: what each window opens at, before the page has
+// measured itself and asked for the height it actually needs.
 //
 // They are the worst case over display scales, not the number this machine
 // reads. Two things move with the scale: the frame is rounded from physical
@@ -32,8 +33,10 @@ const windowFrameHeight = 36
 // separately, so the same page is a few pixels taller at 100% than at 175%.
 // Both were found by the self-test run on the CI runner, which is 100%.
 //
-// Too short scrolls, which is the failure worth paying a band of window under
-// the buttons to avoid.
+// Getting them too large is now a one-frame resize rather than a permanent band
+// of window, and too small a scroll for the same moment - but the self-test
+// still reads these numbers back, so a form that has grown since they were
+// measured fails the run instead of flickering in the release.
 const (
 	nodeFormHeight     = 478
 	settingsFormHeight = 347

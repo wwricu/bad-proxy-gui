@@ -213,18 +213,48 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 	// The second webview has to load its own page and reach the same bindings.
 	// If the process dies here, the crash is in the second window's asset load
 	// rather than in its creation.
-	fields := probeUntil(node, probes, formGeometry, func(s string) bool { return strings.Contains(s, "xhttp") }, 30*time.Second)
+	fields := probeUntil(node, probes, formGeometry, func(s string) bool {
+		return strings.Contains(s, "xhttp") && belowOf(s) >= 0 && belowOf(s) <= 12
+	}, 30*time.Second)
 	c.check(strings.Contains(fields, `"fSecret","fAuthority","fPath","fPadding"`),
 		"xhttp offers every optional field: %s", fields)
 	c.check(strings.Contains(fields, `"scroll":false`),
 		"the tallest form needs no scrollbar: %s", fields)
 	c.check(gapOf(fields) <= 32, "no dead band above the editor's buttons: %s", fields)
-	c.check(belowOf(fields) >= 0 && belowOf(fields) <= 24,
+	// The form asks its window for exactly the height it needs, so anything more
+	// than a pixel of rounding under the buttons is a window that did not listen.
+	c.check(belowOf(fields) >= 0 && belowOf(fields) <= 12,
 		"the editor's buttons sit at the bottom edge: %s", fields)
 	nw, nh := node.Size()
 	fmt.Printf("  form   node editor: window=%dx%d %s\n", nw, nh, fields)
 	time.Sleep(1200 * time.Millisecond)
 	c.shot("node-add")
+
+	// ---- the form that changes while it is open ----
+	// tls drops three rows at once. The window was sized for xhttp, so unless it
+	// follows the fields the buttons slide up off the bottom edge and leave a
+	// band of bare window under them - the failure a fixed form height cannot
+	// see coming, because the form is only tallest when it first opens.
+	probe(node, probes, `(() => { const s = document.getElementById("fTransport"); s.value = "tls"; s.dispatchEvent(new Event("change")); return "sent"; })()`)
+	shrunk := probeUntil(node, probes, formGeometry, func(s string) bool {
+		return strings.Contains(s, `"n":2`) && belowOf(s) >= 0 && belowOf(s) <= 12
+	}, 15*time.Second)
+	c.check(strings.Contains(shrunk, `"scroll":false`),
+		"the short form needs no scrollbar: %s", shrunk)
+	c.check(heightOf(shrunk) > 0 && heightOf(shrunk) < heightOf(fields),
+		"the window shrank with its fields: %s after %s", shrunk, fields)
+	c.check(belowOf(shrunk) >= 0 && belowOf(shrunk) <= 12,
+		"the short form's buttons hold the bottom edge: %s", shrunk)
+	time.Sleep(1200 * time.Millisecond)
+	c.shot("node-tls")
+
+	// Growing back is the same promise in the other direction.
+	probe(node, probes, `(() => { const s = document.getElementById("fTransport"); s.value = "xhttp"; s.dispatchEvent(new Event("change")); return "sent"; })()`)
+	grown := probeUntil(node, probes, formGeometry, func(s string) bool {
+		return strings.Contains(s, `"n":4`) && heightOf(s) == heightOf(fields)
+	}, 15*time.Second)
+	c.check(heightOf(grown) == heightOf(fields),
+		"putting the rows back puts the window back: %s vs %s", grown, fields)
 
 	// An owned window must be on screen the moment it exists, and it must not
 	// have been shoved somewhere else by the ownership call.
@@ -261,7 +291,9 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 	}
 	c.ok("the gear opened the settings window")
 	prefill := probeUntil(settings, probes, settingsGeometry,
-		func(s string) bool { return strings.Contains(s, `"ports":"11909/11908"`) }, 30*time.Second)
+		func(s string) bool {
+			return strings.Contains(s, `"ports":"11909/11908"`) && belowOf(s) >= 0 && belowOf(s) <= 12
+		}, 30*time.Second)
 	c.check(strings.Contains(prefill, `"ports":"11909/11908"`),
 		"the settings form filled itself from the draft: %s", prefill)
 	c.check(strings.Contains(prefill, `"loginRow":"flex"`),
@@ -269,7 +301,7 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 	c.check(strings.Contains(prefill, `"scroll":false`),
 		"the settings form needs no scrollbar: %s", prefill)
 	c.check(gapOf(prefill) <= 32, "no dead band above the settings buttons: %s", prefill)
-	c.check(belowOf(prefill) >= 0 && belowOf(prefill) <= 24,
+	c.check(belowOf(prefill) >= 0 && belowOf(prefill) <= 12,
 		"the settings buttons sit at the bottom edge: %s", prefill)
 	sw, sh := settings.Size()
 	fmt.Printf("  form   settings: window=%dx%d %s\n", sw, sh, prefill)
@@ -322,10 +354,11 @@ const formGeometry = `
 		const body = document.querySelector(".sheet-body");
 		const last = Math.max(...[...document.querySelectorAll(".sheet-body *")]
 			.map((el) => el.getBoundingClientRect().bottom).filter((y) => y > 0));
+		const shown = ["fSecret","fAuthority","fPath","fPadding"].filter((id) =>
+			getComputedStyle(document.getElementById(id)).display !== "none");
 		return {
 			transport: document.getElementById("fTransport") && document.getElementById("fTransport").value,
-			shown: ["fSecret","fAuthority","fPath","fPadding"].filter((id) =>
-				getComputedStyle(document.getElementById(id)).display !== "none"),
+			shown, n: shown.length,
 			scroll: body.scrollHeight > body.clientHeight,
 			gap: Math.round(document.querySelector(".sheet-actions").getBoundingClientRect().top - last),
 			below: Math.round(window.innerHeight -
@@ -364,6 +397,15 @@ func belowOf(probeJSON string) int {
 	}
 	_ = json.Unmarshal([]byte(probeJSON), &out)
 	return out.Below
+}
+
+// heightOf is the client height the page reports for itself.
+func heightOf(probeJSON string) int {
+	var out struct {
+		Inner [2]int `json:"inner"`
+	}
+	_ = json.Unmarshal([]byte(probeJSON), &out)
+	return out.Inner[1]
 }
 
 var probeID atomic.Int64
