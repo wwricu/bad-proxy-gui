@@ -1,6 +1,6 @@
 //go:build windows
 
-package main
+package platform
 
 import (
 	"syscall"
@@ -31,18 +31,18 @@ const (
 	swpNoActivate = 0x0010
 )
 
-// hwndOf is the window's handle, or 0 for a window that is already gone.
-func hwndOf(win application.Window) uintptr {
+// HwndOf is the window's handle, or 0 for a window that is already gone.
+func HwndOf(win application.Window) uintptr {
 	if win == nil {
 		return 0
 	}
 	return uintptr(win.NativeWindow())
 }
 
-// ownerOf returns the window that keeps w on top of it, or 0 when w answers to
+// OwnerOf returns the window that keeps w on top of it, or 0 when w answers to
 // no window in particular.
-func ownerOf(win application.Window) uintptr {
-	hwnd := hwndOf(win)
+func OwnerOf(win application.Window) uintptr {
+	hwnd := HwndOf(win)
 	if hwnd == 0 {
 		return 0
 	}
@@ -53,7 +53,7 @@ func ownerOf(win application.Window) uintptr {
 	return owner
 }
 
-// keepAbove gives the form window the z-order half of a Win32 dialog: the
+// KeepAbove gives the form window the z-order half of a Win32 dialog: the
 // window manager itself guarantees it stays above the main window for as long
 // as it lives, so clicking the list can never bury the form that is waiting for
 // an answer.
@@ -67,8 +67,8 @@ func ownerOf(win application.Window) uintptr {
 // Both calls run on the UI thread because that is the thread the window was
 // created on; from another one SetWindowPos SendMessage's a thread that is not
 // pumping and the app stops there.
-func keepAbove(win application.Window, owner application.Window) {
-	hwnd, ownerHwnd := hwndOf(win), hwndOf(owner)
+func KeepAbove(win application.Window, owner application.Window) {
+	hwnd, ownerHwnd := HwndOf(win), HwndOf(owner)
 	if hwnd == 0 || ownerHwnd == 0 {
 		return
 	}
@@ -81,12 +81,12 @@ func keepAbove(win application.Window, owner application.Window) {
 	})
 }
 
-// raiseToTop puts a window at the top of the z-order without asking for the
+// RaiseToTop puts a window at the top of the z-order without asking for the
 // foreground, which the window manager can refuse without saying so. The
 // self-test drives it there rather than calling Focus: a silent veto would turn
 // the assertion that follows into a test of nothing.
-func raiseToTop(win application.Window) {
-	hwnd := hwndOf(win)
+func RaiseToTop(win application.Window) {
+	hwnd := HwndOf(win)
 	if hwnd == 0 {
 		return
 	}

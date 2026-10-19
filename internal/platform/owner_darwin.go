@@ -1,6 +1,6 @@
 //go:build darwin
 
-package main
+package platform
 
 /*
 #cgo CFLAGS: -x objective-c
@@ -51,7 +51,7 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
-func keepAbove(win application.Window, owner application.Window) {
+func KeepAbove(win application.Window, owner application.Window) {
 	hwnd := win.NativeWindow()
 	ownerHwnd := owner.NativeWindow()
 	if hwnd == nil || ownerHwnd == nil {

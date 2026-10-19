@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"github.com/wwricu/bad-proxy-gui/internal/platform"
 	"os"
 	"path/filepath"
 	"strings"
@@ -180,18 +181,13 @@ func newStoreFromConfigDir() *store {
 	return newStore(dir)
 }
 
-// appDirName is the per-user config folder name, and portableMarker is the
-// file that opts a Windows release folder into keeping its data beside the
-// executable.
-const (
-	appDirName     = "bad-proxy-gui"
-	portableMarker = ".portable"
-)
+// appDirName is the per-user config folder name.
+const appDirName = "bad-proxy-gui"
 
 // appConfigDir is where GUI state persists. A plain Go build (and CI smoke
 // test) can locate it without a running app.
 func appConfigDir() (string, error) {
-	if dir, ok := portableConfigDir(); ok {
+	if dir, ok := platform.PortableConfigDir(); ok {
 		return dir, nil
 	}
 	base, err := os.UserConfigDir()

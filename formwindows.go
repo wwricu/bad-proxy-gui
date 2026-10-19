@@ -6,6 +6,7 @@ import (
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
+	"github.com/wwricu/bad-proxy-gui/internal/platform"
 )
 
 // Form windows are the settings window and the node editor: ordinary webview
@@ -21,14 +22,14 @@ const (
 
 	formWindowWidth = 460
 
-	// settingsFormHeight and nodeFormHeight are what each form's page needs in
+	// platform.SettingsFormHeight and platform.NodeFormHeight are what each form's page needs in
 	// client height, and they are per-platform: a field and a popup are drawn by
 	// the operating system, so the same page is a different height on each. The
 	// self-tests measure the result rather than trust the number - a window too
 	// short shows a scrollbar, one too tall leaves a band of its own window under
 	// the buttons, and both fail the run.
-	settingsWindowHeight = settingsFormHeight + windowFrameHeight
-	nodeWindowHeight     = nodeFormHeight + windowFrameHeight
+	settingsWindowHeight = platform.SettingsFormHeight + platform.WindowFrameHeight
+	nodeWindowHeight     = platform.NodeFormHeight + platform.WindowFrameHeight
 )
 
 // openFormWindow shows one form window, or refuses to. There is never a second
@@ -53,7 +54,7 @@ func (a *App) openFormWindow(name, title, url string, height int) {
 	// A form belongs to the window it was called from, so the window manager
 	// keeps it above that one. Without this the list can be clicked into and
 	// bury the form it is supposed to be waiting for.
-	keepAbove(win, a.mainWindow)
+	platform.KeepAbove(win, a.mainWindow)
 	// The list is in another window, so it has to be told to reread once this
 	// one is done writing. The hook runs for the native cross as well as for the
 	// Cancel button, which is the point: both are the window finishing its work.
@@ -73,7 +74,7 @@ func (a *App) openFormWindow(name, title, url string, height int) {
 func (a *App) nudgeFormWindow(win application.Window) {
 	win.Show()
 	win.Focus()
-	flashForAttention(win)
+	platform.FlashForAttention(win)
 }
 
 func (a *App) openSettingsWindow() {
@@ -126,7 +127,7 @@ func (a *App) anyFormWindow() application.Window {
 //
 // The split is deliberate: the page knows how tall its own fields are, and only
 // this side knows which convention a resize uses on this platform. The number
-// crossing the boundary is a client height and resizeFrameHeight is added here.
+// crossing the boundary is a client height and platform.ResizeFrameHeight is added here.
 // Without it, hiding a row leaves the window as tall as the tallest form and the
 // buttons drift up off the bottom edge, stranding a band of empty window under
 // them.
@@ -142,7 +143,7 @@ func (a *App) FitFormWindow(clientHeight int) {
 	if form == nil || clientHeight <= 0 {
 		return
 	}
-	form.SetSize(formWindowWidth, clientHeight+resizeFrameHeight)
+	form.SetSize(formWindowWidth, clientHeight+platform.ResizeFrameHeight)
 }
 
 // hideFormWindow and showFormWindow move the form with the list it belongs to.

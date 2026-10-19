@@ -1,6 +1,6 @@
 //go:build windows
 
-package main
+package platform
 
 import (
 	"syscall"
@@ -32,11 +32,11 @@ type flashInfo struct {
 	timeout uint32
 }
 
-// flashForAttention asks the window manager itself for the "over here" blink.
+// FlashForAttention asks the window manager itself for the "over here" blink.
 // This is the effect a Win32 modal dialog gives when you click outside it: the
 // dialog manager calls FlashWindowEx, it does not move the window, and neither
 // do we.
-func flashForAttention(win application.Window) {
+func FlashForAttention(win application.Window) {
 	hwnd := win.NativeWindow()
 	if hwnd == nil {
 		return

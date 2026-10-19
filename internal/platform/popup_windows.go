@@ -1,6 +1,6 @@
 //go:build windows
 
-package main
+package platform
 
 import (
 	"fmt"
@@ -11,9 +11,9 @@ import (
 	"unsafe"
 )
 
-// nativeContextMenuSupported tells the frontend to use the real OS menu
+// NativeContextMenuSupported tells the frontend to use the real OS menu
 // instead of drawing the DOM fallback.
-const nativeContextMenuSupported = true
+const NativeContextMenuSupported = true
 
 var (
 	user32Ctx            = syscall.NewLazyDLL("user32.dll")
@@ -201,10 +201,10 @@ func trackMenu(host uintptr, labels []string) int {
 	return int(cmd) - ctxCmdBase
 }
 
-// showNativeContextMenu pops a real Win32 shortcut menu at the cursor and
+// ShowNativeContextMenu pops a real Win32 shortcut menu at the cursor and
 // waits until the user picks an item or dismisses it. Returns the selected
 // index, or -1 when dismissed.
-func showNativeContextMenu(labels []string) (int, error) {
+func ShowNativeContextMenu(labels []string) (int, error) {
 	menuStart.Do(func() { go menuThread() })
 	select {
 	case <-menuReady:

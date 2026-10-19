@@ -1,10 +1,10 @@
 //go:build darwin
 
-package main
+package platform
 
 import "github.com/wailsapp/wails/v3/pkg/application"
 
-// flashForAttention is AppKit's own attention signal: Wails maps it to
+// FlashForAttention is AppKit's own attention signal: Wails maps it to
 // requestUserAttention, which bounces the Dock icon once - the answer to "the
 // window you want is already open, here it is".
 //
@@ -12,6 +12,6 @@ import "github.com/wailsapp/wails/v3/pkg/application"
 // sheet machinery (presenting a second sheet on a window that already has one
 // shakes it) and cannot be asked for on its own, so the Dock bounce stands in
 // for it rather than an animation of ours.
-func flashForAttention(win application.Window) {
+func FlashForAttention(win application.Window) {
 	win.Flash(true)
 }

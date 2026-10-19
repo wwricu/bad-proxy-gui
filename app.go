@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wwricu/bad-proxy-gui/internal/platform"
 )
 
 // App exposes backend methods to the frontend via Wails runtime binding.
@@ -46,7 +47,7 @@ func (a *App) ServiceStartup(context.Context, application.ServiceOptions) error 
 	// inbound. Non-system launches must not touch it: a direct/proxy start
 	// should leave whatever proxy config the user has alone.
 	if a.st.ProxyMode == modeSystem {
-		_ = setSystemProxy(a.st.HttpPort)
+		_ = platform.SetSystemProxy(a.st.HttpPort)
 	}
 	return nil
 }
@@ -56,7 +57,7 @@ func (a *App) showWindow() {
 	if a.mainWindow == nil {
 		return
 	}
-	becomeForeground(windowTitle)
+	platform.BecomeForeground(windowTitle)
 	a.mainWindow.UnMinimise()
 	a.mainWindow.Show()
 	a.mainWindow.Focus()
@@ -71,7 +72,7 @@ func (a *App) showWindow() {
 // lands as a no-op and the list taking the form down with it is what works.
 func (a *App) hideToTray() {
 	a.hideFormWindow()
-	becomeBackground()
+	platform.BecomeBackground()
 	if a.mainWindow != nil {
 		a.mainWindow.Hide()
 	}
@@ -301,17 +302,17 @@ func (a *App) shutdown() {
 		a.eng.stop()
 	}
 	if a.st.ProxyMode == modeSystem {
-		_ = clearSystemProxy()
+		_ = platform.ClearSystemProxy()
 	}
 }
 
 // GetPlatformInfo returns platform-specific capabilities.
 func (a *App) GetPlatformInfo() map[string]bool {
 	return map[string]bool{
-		"startLoginSupported":  startAtLoginSupported,
-		"trayCanHide":          trayCanHide,
-		"systemProxySupported": systemProxySupported,
-		"nativeContextMenu":    nativeContextMenuSupported,
+		"startLoginSupported":           platform.StartAtLoginSupported,
+		"platform.TrayCanHide":          platform.TrayCanHide,
+		"platform.SystemProxySupported": platform.SystemProxySupported,
+		"nativeContextMenu":             platform.NativeContextMenuSupported,
 	}
 }
 
@@ -320,7 +321,7 @@ func (a *App) GetPlatformInfo() map[string]bool {
 // when dismissed. The frontend only calls it when GetPlatformInfo reports
 // nativeContextMenu.
 func (a *App) ShowContextMenu(labelsNL string) int {
-	sel, err := showNativeContextMenu(strings.Split(labelsNL, "\n"))
+	sel, err := platform.ShowNativeContextMenu(strings.Split(labelsNL, "\n"))
 	if err != nil {
 		println("native context menu unavailable: " + err.Error())
 		return -1

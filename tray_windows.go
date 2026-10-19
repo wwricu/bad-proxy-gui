@@ -4,6 +4,7 @@ package main
 
 import (
 	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wwricu/bad-proxy-gui/internal/platform"
 )
 
 // setupTray creates the notification-area icon. Wails owns the tray loop, so
@@ -15,7 +16,7 @@ import (
 // macOS has its own version in tray_darwin.go: the item there has to be AppKit's
 // own so System Settings can manage it.
 func setupTray(a *App, wails *application.App) {
-	if trayCanHide && a.st.HideTray {
+	if platform.TrayCanHide && a.st.HideTray {
 		return
 	}
 	a.trayOn = true

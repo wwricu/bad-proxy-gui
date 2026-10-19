@@ -20,6 +20,7 @@ import (
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
+	"github.com/wwricu/bad-proxy-gui/internal/platform"
 )
 
 // Drives the app the way the buttons do, checks what each page actually
@@ -319,9 +320,9 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 	// The form is the main window's, not a stranger on the desktop: the window
 	// manager is what keeps it on top, so check the relationship rather than
 	// trusting that it looks right in a screenshot.
-	c.check(waitOwner(node, hwndOf(a.mainWindow), 5*time.Second) == hwndOf(a.mainWindow),
+	c.check(waitOwner(node, platform.HwndOf(a.mainWindow), 5*time.Second) == platform.HwndOf(a.mainWindow),
 		"the editor is owned by the main window: main=%x node=%x owner=%x",
-		hwndOf(a.mainWindow), hwndOf(node), ownerOf(node))
+		platform.HwndOf(a.mainWindow), platform.HwndOf(node), platform.OwnerOf(node))
 	c.check(aboveInStack(node, win), "the editor starts out above the main window")
 	// PrintWindow on a window that has only just been shown comes out black: the
 	// page is loaded (the probe above answered) but the compositor has not drawn
@@ -748,7 +749,7 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 		// answer. SetWindowPos rather than Focus because the foreground lock can
 		// veto SetForegroundWindow silently, and a veto would make this a test
 		// of nothing.
-		raiseToTop(win)
+		platform.RaiseToTop(win)
 		time.Sleep(400 * time.Millisecond)
 		c.check(aboveInStack(form, win),
 			"the settings window is still above the main window after the main window was raised")
@@ -1057,7 +1058,7 @@ func loopDone(probeJSON string) bool {
 func waitForm(a *App, name string, limit time.Duration) application.Window {
 	deadline := time.Now().Add(limit)
 	for time.Now().Before(deadline) {
-		if w := a.formByName(name); w != nil && hwndOf(w) != 0 {
+		if w := a.formByName(name); w != nil && platform.HwndOf(w) != 0 {
 			return w
 		}
 		time.Sleep(100 * time.Millisecond)
@@ -1065,19 +1066,19 @@ func waitForm(a *App, name string, limit time.Duration) application.Window {
 	return nil
 }
 
-// waitOwner polls until w reports want as its owner. keepAbove runs after the
+// waitOwner polls until w reports want as its owner. platform.KeepAbove runs after the
 // window is created and filed, so a form is briefly a stranger on the desktop;
 // reading the owner once turns that moment into a failed assertion on a machine
 // that starts windows more slowly than this one does.
 func waitOwner(w application.Window, want uintptr, limit time.Duration) uintptr {
 	deadline := time.Now().Add(limit)
 	for time.Now().Before(deadline) {
-		if owner := ownerOf(w); owner == want {
+		if owner := platform.OwnerOf(w); owner == want {
 			return owner
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	return ownerOf(w)
+	return platform.OwnerOf(w)
 }
 
 // waitClosed polls the other way: a form window finishes its work by closing,
@@ -1157,7 +1158,8 @@ func sum(xs []int) int {
 
 var stGetWindowProc = stUser32.NewProc("GetWindow")
 
-// hwndOf, ownerOf and raiseToTop live in owner_windows.go.
+// platform.HwndOf, platform.OwnerOf and platform.RaiseToTop live in
+// internal/platform/owner_windows.go.
 //
 // gwHwndNext walks DOWN the z-order: the list is headed by the topmost window,
 // so the window beneath a given one is its "next".
@@ -1168,7 +1170,7 @@ const gwHwndNext = 2
 // That chain crosses other processes' windows, so what matters is whether lower
 // turns up at all, not how far away it is.
 func aboveInStack(upper, lower application.Window) bool {
-	u, l := hwndOf(upper), hwndOf(lower)
+	u, l := platform.HwndOf(upper), platform.HwndOf(lower)
 	if u == 0 || l == 0 {
 		return false
 	}

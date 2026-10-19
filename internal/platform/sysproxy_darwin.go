@@ -1,6 +1,6 @@
 //go:build darwin
 
-package main
+package platform
 
 import (
 	"fmt"
@@ -8,13 +8,13 @@ import (
 	"strings"
 )
 
-// systemProxySupported reports that this platform can set and clear the OS proxy.
-const systemProxySupported = true
+// SystemProxySupported reports that this platform can set and clear the OS proxy.
+const SystemProxySupported = true
 
-// setSystemProxy points the active service's http and https proxies at
+// SetSystemProxy points the active service's http and https proxies at
 // 127.0.0.1:port and turns them on. networksetup stores the server/port, so
-// clearSystemProxy only flips the state off; setting is what puts our ports back.
-func setSystemProxy(port string) error {
+// ClearSystemProxy only flips the state off; setting is what puts our ports back.
+func SetSystemProxy(port string) error {
 	svc, err := activeNetworkService()
 	if err != nil {
 		return err
@@ -32,11 +32,11 @@ func setSystemProxy(port string) error {
 	return nil
 }
 
-// clearSystemProxy switches every proxy kind networksetup knows about off for
+// ClearSystemProxy switches every proxy kind networksetup knows about off for
 // the active service. macOS exposes no API to erase the stored server/port, so
 // "off" is as close to a wipe as the platform allows; it is what actually stops
 // traffic from using a proxy left behind by another program.
-func clearSystemProxy() error {
+func ClearSystemProxy() error {
 	svc, err := activeNetworkService()
 	if err != nil {
 		return err

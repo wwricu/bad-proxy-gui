@@ -16,6 +16,7 @@ import (
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
+	"github.com/wwricu/bad-proxy-gui/internal/platform"
 )
 
 // The macOS half of the form-window self-test. It drives the app the way the
@@ -345,7 +346,7 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 
 	// ---- hide and reopen with a form still open ----
 	// An owned window is not hidden along with its owner, so the app takes it
-	// itself. becomeForeground/becomeBackground reach into NSApp from here.
+	// itself. platform.BecomeForeground/platform.BecomeBackground reach into NSApp from here.
 	probe(win, probes, `(() => { document.getElementById("gearBtn").click(); return "sent"; })()`)
 	settings = waitForm(a, settingsWindowName, 10*time.Second)
 	if settings == nil {

@@ -1,6 +1,6 @@
 //go:build windows
 
-package main
+package platform
 
 import (
 	"errors"
@@ -12,8 +12,8 @@ import (
 
 const internetSettingsKey = `Software\Microsoft\Windows\CurrentVersion\Internet Settings`
 
-// systemProxySupported reports that this platform can set and clear the OS proxy.
-const systemProxySupported = true
+// SystemProxySupported reports that this platform can set and clear the OS proxy.
+const SystemProxySupported = true
 
 var (
 	wininet            = windows.NewLazySystemDLL("wininet.dll")
@@ -25,10 +25,10 @@ const (
 	internetOptionRefresh         = 37
 )
 
-// setSystemProxy points the WinINet http proxy at 127.0.0.1:port and enables
+// SetSystemProxy points the WinINet http proxy at 127.0.0.1:port and enables
 // it. <local> plus the loopback literals go in ProxyOverride so the OS does not
 // proxy the very ports we are dialing.
-func setSystemProxy(port string) error {
+func SetSystemProxy(port string) error {
 	k, err := registry.OpenKey(registry.CURRENT_USER, internetSettingsKey, registry.SET_VALUE)
 	if err != nil {
 		return fmt.Errorf("open internet settings: %w", err)
@@ -50,12 +50,12 @@ func setSystemProxy(port string) error {
 	return nil
 }
 
-// clearSystemProxy wipes the WinINet proxy configuration outright. Flipping
+// ClearSystemProxy wipes the WinINet proxy configuration outright. Flipping
 // ProxyEnable to 0 is not enough: Settings keeps rendering the stale
 // ProxyServer/ProxyOverride values, and any app that reads ProxyServer without
 // checking ProxyEnable still picks the proxy up. The values are deleted, so
 // whatever another program left behind is gone too.
-func clearSystemProxy() error {
+func ClearSystemProxy() error {
 	k, err := registry.OpenKey(registry.CURRENT_USER, internetSettingsKey, registry.SET_VALUE)
 	if err != nil {
 		return fmt.Errorf("open internet settings: %w", err)

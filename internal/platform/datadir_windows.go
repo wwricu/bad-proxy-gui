@@ -1,13 +1,17 @@
 //go:build windows
 
-package main
+package platform
 
 import (
 	"os"
 	"path/filepath"
 )
 
-// portableConfigDir keeps state.json and rules.dat beside the executable, so
+// portableMarker is the file that opts a Windows release folder into keeping
+// its data beside the executable.
+const portableMarker = ".portable"
+
+// PortableConfigDir keeps state.json and rules.dat beside the executable, so
 // unzipping one folder anywhere (another machine, a USB stick) carries the
 // whole setup along.
 //
@@ -17,7 +21,7 @@ import (
 //     scattering a second state.json through the source tree.
 //   - the directory is actually writable. Program Files and read-only media
 //     must fall back to %AppData%, not fail on every save.
-func portableConfigDir() (string, bool) {
+func PortableConfigDir() (string, bool) {
 	exe, err := os.Executable()
 	if err != nil {
 		return "", false

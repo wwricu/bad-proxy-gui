@@ -2,12 +2,12 @@
 
 // The menu-bar item is AppKit's own NSStatusItem, not Wails' SystemTray. Only
 // the former appears in System Settings, which is where the user turns a
-// menu-bar item off; the Wails one is invisible to it. tray.go, which uses
-// Wails, is built for every other platform.
+// menu-bar item off; the Wails one is invisible to it. tray_windows.go, which
+// uses Wails, is the other platform's version.
 //
 // The Objective-C is in tray_darwin.m rather than in the preamble below because
-// //export only allows declarations there - the same split mainthread_darwin.m
-// uses, and for the same reason.
+// //export only allows declarations there - the same split
+// internal/platform/mainthread_darwin.m uses, and for the same reason.
 package main
 
 /*
@@ -19,6 +19,7 @@ import "C"
 
 import (
 	_ "embed"
+	"github.com/wwricu/bad-proxy-gui/internal/platform"
 	"unsafe"
 )
 
@@ -35,7 +36,7 @@ var trayClick func()
 //export badproxyTrayClicked
 func badproxyTrayClicked() {
 	if trayClick != nil {
-		postToMainThread(trayClick)
+		platform.PostToMainThread(trayClick)
 	}
 }
 

@@ -1,6 +1,6 @@
 //go:build darwin
 
-package main
+package platform
 
 import (
 	"fmt"
@@ -10,8 +10,8 @@ import (
 	"strings"
 )
 
-// startAtLoginSupported reports that this platform can register a login item.
-const startAtLoginSupported = true
+// StartAtLoginSupported reports that this platform can register a login item.
+const StartAtLoginSupported = true
 
 const launchAgentLabel = "icu.wwr.badproxy.gui"
 
@@ -24,10 +24,10 @@ func launchAgentPath() (string, error) {
 	return filepath.Join(home, "Library", "LaunchAgents", launchAgentLabel+".plist"), nil
 }
 
-// setStartAtLogin writes/removes a LaunchAgent that runs the app binary at
+// SetStartAtLogin writes/removes a LaunchAgent that runs the app binary at
 // login. ProgramArguments points straight at os.Executable() (the binary inside
 // the .app), which works even for an ad-hoc signed, un-notarised build.
-func setStartAtLogin(enable bool) error {
+func SetStartAtLogin(enable bool) error {
 	path, err := launchAgentPath()
 	if err != nil {
 		return err

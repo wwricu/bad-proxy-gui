@@ -1,6 +1,6 @@
 //go:build windows
 
-package main
+package platform
 
 import (
 	"fmt"
@@ -9,18 +9,18 @@ import (
 	"golang.org/x/sys/windows/registry"
 )
 
-// startAtLoginSupported reports that this platform can register a login item.
-const startAtLoginSupported = true
+// StartAtLoginSupported reports that this platform can register a login item.
+const StartAtLoginSupported = true
 
 const (
 	runKey       = `Software\Microsoft\Windows\CurrentVersion\Run`
 	runValueName = "Bad Proxy"
 )
 
-// setStartAtLogin adds or removes the current executable from HKCU Run, so the
+// SetStartAtLogin adds or removes the current executable from HKCU Run, so the
 // app launches when the user signs in. HKCU needs no admin. The path is quoted
 // because install locations commonly contain spaces.
-func setStartAtLogin(enable bool) error {
+func SetStartAtLogin(enable bool) error {
 	k, err := registry.OpenKey(registry.CURRENT_USER, runKey, registry.SET_VALUE)
 	if err != nil {
 		return fmt.Errorf("open run key: %w", err)

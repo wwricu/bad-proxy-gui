@@ -1,23 +1,23 @@
 //go:build windows
 
-package main
+package platform
 
-// trayCanHide is true on Windows: the tray icon may be hidden. With it
+// TrayCanHide is true on Windows: the tray icon may be hidden. With it
 // hidden, closing the window falls through to quit rather than hiding
 // invisibly.
-const trayCanHide = true
+const TrayCanHide = true
 
-// windowFrameHeight is what the caption and border cost: Wails' window Height
+// WindowFrameHeight is what the caption and border cost: Wails' window Height
 // is the whole window here, so a form's client height is this much less than
 // the number handed to it. Measured in the self-test run, which also charges
 // 13 px of width to the frame.
-const windowFrameHeight = 36
+const WindowFrameHeight = 36
 
-// resizeFrameHeight is the same frame again, because resizing a window uses the
+// ResizeFrameHeight is the same frame again, because resizing a window uses the
 // whole-window convention that creating one does. It is only a starting guess:
 // the frame is 36 px on a display at 175% scaling and 39 at 100%, and the page
 // measures the difference and asks for the rest.
-const resizeFrameHeight = windowFrameHeight
+const ResizeFrameHeight = WindowFrameHeight
 
 // The two forms' client heights: what each window opens at, before the page has
 // measured itself and asked for the height it actually needs.
@@ -34,6 +34,6 @@ const resizeFrameHeight = windowFrameHeight
 // still reads these numbers back, so a form that has grown since they were
 // measured fails the run instead of flickering in the release.
 const (
-	nodeFormHeight     = 478
-	settingsFormHeight = 393
+	NodeFormHeight     = 478
+	SettingsFormHeight = 393
 )

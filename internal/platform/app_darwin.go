@@ -1,6 +1,6 @@
 //go:build darwin
 
-package main
+package platform
 
 /*
 #cgo CFLAGS: -x objective-c
@@ -39,8 +39,8 @@ static void showMainWindow(const char* title) {
 	}
 }
 
-// becomeBackground hides the Dock icon, leaving only the menu-bar item.
-static void becomeBackground(void) {
+// BecomeBackground hides the Dock icon, leaving only the menu-bar item.
+static void BecomeBackground(void) {
 	[NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
 }
 */
@@ -51,7 +51,7 @@ import "unsafe"
 // The two entry points below touch NSApp and its windows, so they hop to the
 // main thread before calling in: they are reached from tray callbacks and from
 // Wails' lifecycle hooks, neither of which runs there.
-func becomeForeground(title string) {
+func BecomeForeground(title string) {
 	ct := C.CString(title)
 	runOnMainThread(func() {
 		defer C.free(unsafe.Pointer(ct))
@@ -59,6 +59,6 @@ func becomeForeground(title string) {
 	})
 }
 
-func becomeBackground() {
-	runOnMainThread(func() { C.becomeBackground() })
+func BecomeBackground() {
+	runOnMainThread(func() { C.BecomeBackground() })
 }

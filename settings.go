@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"github.com/wwricu/bad-proxy-gui/internal/platform"
 	"strconv"
 	"strings"
 )
@@ -77,7 +78,7 @@ func (a *App) ApplySettings(s Settings) error {
 	// Registering with the OS first keeps the persisted flag truthful: a failure
 	// here leaves the running proxy exactly as it was.
 	if next.StartLogin != prev.StartLogin {
-		if err := setStartAtLogin(next.StartLogin); err != nil {
+		if err := platform.SetStartAtLogin(next.StartLogin); err != nil {
 			return fmt.Errorf("start at login failed: %w", err)
 		}
 	}
@@ -93,9 +94,9 @@ func (a *App) ApplySettings(s Settings) error {
 	// proxy change never disturbs whatever the user configured themselves.
 	switch {
 	case next.ProxyMode == modeSystem:
-		return setSystemProxy(next.HttpPort)
+		return platform.SetSystemProxy(next.HttpPort)
 	case prev.ProxyMode == modeSystem:
-		return clearSystemProxy()
+		return platform.ClearSystemProxy()
 	}
 	return nil
 }

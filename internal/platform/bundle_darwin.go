@@ -1,13 +1,13 @@
 //go:build darwin
 
-package main
+package platform
 
 import (
 	"os"
 	"path/filepath"
 )
 
-// bundleRulesPath finds the dataset sealed into the running .app bundle:
+// BundleRulesPath finds the dataset sealed into the running .app bundle:
 //
 //	Bad Proxy.app/Contents/MacOS/bad-proxy-gui  ->  Contents/Resources/rules.dat
 //
@@ -17,7 +17,7 @@ import (
 // an explicit user override works.
 //
 // package-darwin.sh (or the CI mac job) places the file there before signing.
-func bundleRulesPath() string {
+func BundleRulesPath() string {
 	exe, err := os.Executable()
 	if err != nil {
 		return ""

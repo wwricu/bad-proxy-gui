@@ -2,6 +2,7 @@ package main
 
 import (
 	_ "embed"
+	"github.com/wwricu/bad-proxy-gui/internal/platform"
 	"os"
 	"path/filepath"
 )
@@ -34,7 +35,7 @@ func ensureRulesDat() string {
 	if fileExists(path) {
 		return path
 	}
-	if bundle := bundleRulesPath(); bundle != "" {
+	if bundle := platform.BundleRulesPath(); bundle != "" {
 		return bundle
 	}
 	if err := os.WriteFile(path, rulesDat, 0o600); err != nil {

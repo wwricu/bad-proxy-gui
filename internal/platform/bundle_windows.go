@@ -1,7 +1,7 @@
 //go:build windows
 
-package main
+package platform
 
 // Only a macOS .app bundle carries resources next to its executable; on Windows
 // the dataset always lives in the data dir.
-func bundleRulesPath() string { return "" }
+func BundleRulesPath() string { return "" }

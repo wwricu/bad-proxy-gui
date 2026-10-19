@@ -4,14 +4,14 @@
 // entry points break that rule by accident: Wails occupies the main thread with
 // [NSApp run], so anything we call from a goroutine lands on a worker thread -
 // and both systray's nativeStart (the status item owns an NSStatusBarWindow)
-// and the becomeForeground/becomeBackground calls reach into AppKit from there.
+// and the BecomeForeground/BecomeBackground calls reach into AppKit from there.
 // The result is an NSInternalInconsistencyException, not a returned error, so
 // the process dies before any Go-side handling can see it.
 //
 // The task therefore has to be handed back to the run loop Wails already owns.
 // //export confines this file's preamble to declarations, which is why the
 // dispatch block itself lives in mainthread_darwin.m.
-package main
+package platform
 
 /*
 extern void badproxyMainTask(void);
@@ -52,13 +52,13 @@ func runOnMainThread(fn func()) {
 	<-done
 }
 
-// postToMainThread queues fn for the main run loop and returns without waiting.
+// PostToMainThread queues fn for the main run loop and returns without waiting.
 //
 // This is what an AppKit action handler needs: cgo parks the thread that called
 // into Go until the exported function returns, and that thread is the main one,
 // so a task queued from there and waited on there would be waiting behind the
 // very call it is standing inside.
-func postToMainThread(fn func()) {
+func PostToMainThread(fn func()) {
 	select {
 	case mainQueue <- fn:
 		C.badproxyRunOnMain()
