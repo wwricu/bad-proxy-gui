@@ -279,6 +279,10 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 	needs := layout.Actions + sum(layout.Wide) + layout.BarPad + layout.StatusPad
 	fmt.Printf("  bar    actions=%d readouts=%v pads=%d+%d needs=%d of %d\n",
 		layout.Actions, layout.Wide, layout.BarPad, layout.StatusPad, needs, layout.Inner)
+	// The other number the floor is made of. It is not the same on a runner at
+	// 100% as on a display at 175%, and the difference is what first failed here.
+	fmt.Printf("  main   floor: window=%dx%d client=%dx%d chrome=%d\n",
+		minW, minH, layout.Inner, layout.Page[3], minH-layout.Page[3])
 	if layout.Inner > 0 {
 		c.check(needs <= layout.Inner,
 			"the minimum width is wide enough for the whole bar: needs %d, has %d", needs, layout.Inner)

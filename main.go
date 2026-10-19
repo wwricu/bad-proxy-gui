@@ -43,7 +43,7 @@ const (
 	mainWindowRowH    = 63  // one node row: 13+14+8+14+13+1 px
 	mainWindowListH   = 4   // the gap .node-list keeps from the window's top edge
 	mainWindowBarH    = 36
-	mainWindowChromeH = 36 // caption and border, measured off a live window
+	mainWindowChromeH = 44 // caption and border: 31 on mac, 39 on Windows at 100%
 	mainWindowMinRows = 3  // the floor is this many node rows tall
 )
 
