@@ -132,14 +132,32 @@ func runFormSelfTest() int {
 			}
 		}
 	})
+	var finished atomic.Bool
 	wails.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) {
-		go checkForms(a, c, probes, dir)
+		go func() {
+			checkForms(a, c, probes, dir)
+			finished.Store(true)
+			// The verdict has to leave the process from in here: Quit is
+			// -[NSApp terminate:] on macOS, which exits 0 inside the call, so a
+			// tally after Run() is only ever reached on Windows. A self-test that
+			// cannot fail is worse than none, because it reads as coverage.
+			os.Exit(c.exit())
+		}()
 	})
 
 	if err := wails.Run(); err != nil {
 		fmt.Println("run:", err)
 		return 1
 	}
+	if !finished.Load() {
+		fmt.Println("the checks never ran")
+		return 1
+	}
+	return c.exit()
+}
+
+// exit turns the tally into a process status.
+func (c *checker) exit() int {
 	if len(c.fails) > 0 {
 		fmt.Printf("\n%d check(s) failed\n", len(c.fails))
 		return 1
@@ -253,6 +271,12 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 		a.quit()
 		return
 	}
+	// Which call is the one that does not stick: the form's own Hide, or the main
+	// window's, which AppKit may answer by bringing the child back with it?
+	a.hideFormWindow()
+	time.Sleep(500 * time.Millisecond)
+	c.check(!settings.IsVisible(), "the form hides when the app asks it to: form=%v",
+		settings.IsVisible())
 	a.hideToTray()
 	time.Sleep(800 * time.Millisecond)
 	c.check(!win.IsVisible() && !settings.IsVisible(),
