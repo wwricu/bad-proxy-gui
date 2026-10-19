@@ -14,6 +14,7 @@ type App struct {
 	wails      *application.App
 	mainWindow application.Window
 	tray       *application.SystemTray
+	nativeTray interface{} // *nativeTray on macOS; nil elsewhere
 	eng        engine
 	st         GUIState
 	store      *store
