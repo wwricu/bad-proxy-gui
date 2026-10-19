@@ -3,7 +3,7 @@ module github.com/wwricu/bad-proxy-gui
 go 1.26.3
 
 require (
-	github.com/wwricu/bad-proxy-core v1.2.0-beta-2
+	github.com/wwricu/bad-proxy-core v1.2.0-beta-3
 	golang.org/x/sys v0.48.0
 )
 
