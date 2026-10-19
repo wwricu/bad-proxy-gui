@@ -180,6 +180,11 @@ func NewStore(dir string) *Store {
 	return &Store{path: filepath.Join(dir, "state.json")}
 }
 
+// Dir is the folder the state file lives in. A platform that has no per-app
+// store of its own keeps what it is about to overwrite of the system proxy in
+// here.
+func (s *Store) Dir() string { return filepath.Dir(s.path) }
+
 // OpenStore creates a store in the per-user directory UserDir picks.
 func OpenStore() *Store {
 	dir, err := UserDir()
@@ -281,11 +286,9 @@ func (st *Store) readOrEmpty() []byte {
 	return b
 }
 
-// Save writes the state atomically: a full file or the previous one, never the
-// half that a crash or a full disk leaves behind in place of it. The temp file
-// has to be in the same directory, because rename does not cross volumes, and the
-// rename is platform.RenameOver, because the file it replaces may be held open
-// for a moment by something that is not this app.
+// Save writes the state through platform.WriteAtomic: a full file or the
+// previous one, never the half that a crash or a full disk leaves behind in
+// place of it.
 func (st *Store) Save(s State) error {
 	if err := os.MkdirAll(filepath.Dir(st.path), 0o700); err != nil {
 		return err
@@ -294,18 +297,5 @@ func (st *Store) Save(s State) error {
 	if err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(st.path), "state-*.json")
-	if err != nil {
-		return err
-	}
-	name := tmp.Name()
-	defer os.Remove(name)
-	if _, err := tmp.Write(b); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return platform.RenameOver(name, st.path)
+	return platform.WriteAtomic(st.path, b)
 }
