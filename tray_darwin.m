@@ -34,7 +34,10 @@ void *badproxyCreateStatusItem(const unsigned char *imgData, int imgLen) {
 			return (void *)statusItem;
 		}
 		NSData *data = [NSData dataWithBytes:imgData length:imgLen];
-		NSImage *image = [NSImage imageWithData:data];
+		if (data == nil) {
+			return NULL;
+		}
+		NSImage *image = [[NSImage alloc] initWithData:data];
 		if (image == nil) {
 			return NULL;
 		}
@@ -43,9 +46,11 @@ void *badproxyCreateStatusItem(const unsigned char *imgData, int imgLen) {
 		statusItem = [[[NSStatusBar systemStatusBar]
 			statusItemWithLength:NSSquareStatusItemLength] retain];
 		if (statusItem == nil) {
+			[image release];
 			return NULL;
 		}
 		[statusItem setImage:image];
+		[image release];
 		[statusItem setHighlightMode:YES];
 		[statusItem setToolTip:@"Bad Proxy"];
 		clickTarget = [BadproxyClickTarget new];
