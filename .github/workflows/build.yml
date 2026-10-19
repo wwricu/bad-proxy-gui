@@ -8,6 +8,13 @@ on:
 permissions:
   contents: read
 
+# macos-latest has limited runner capacity, and a burst of pushes used to queue
+# several copies of the same build behind each other - one commit waited 13
+# minutes for a runner that its own successor had already made stale.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   windows:
     runs-on: windows-latest

@@ -1,0 +1,103 @@
+name: Form self-test (both platforms)
+
+# The behaviour harness opens real form windows and drives them, so it can only
+# run where there is a window server - never on this machine. It is not wired
+# into any pipeline any more: run it here, or with
+# `gh workflow run form-selftest.yml`, before cutting a release tag.
+#
+# Each platform is its own job because the two need different evidence when
+# they fail: WebView2 aborts leave a WER dump, an NSException leaves a crash
+# report.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # windows-latest has a desktop session and ships the WebView2 runtime, which
+  # is the only reason a webview window can be driven in CI at all.
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Fetch rules.dat for go:embed
+        # rules.dat is gitignored, but //go:embed needs it at build time.
+        shell: bash
+        run: |
+          curl -fsSL -o rules.dat \
+            https://github.com/wwricu/domain-list-community/releases/latest/download/rules.dat \
+            || : > rules.dat
+      - name: Drive the form windows
+        shell: bash
+        env:
+          BADPROXY_GUI_SELFTEST: "1"
+        # pipefail so the harness verdict is not replaced by tee's exit code.
+        run: |
+          set -o pipefail
+          export BADPROXY_SELFTEST_SHOTS="$RUNNER_TEMP/shots"
+          mkdir -p "$BADPROXY_SELFTEST_SHOTS"
+          go test -tags production -count=1 -v -timeout 15m . \
+            2>&1 | tee "$BADPROXY_SELFTEST_SHOTS/selftest.log"
+      - name: Collect the crash dump
+        if: failure()
+        shell: bash
+        # A Wails/WebView2 abort leaves a WER dump rather than a stack trace in
+        # stdout, and without it the only evidence is a timeout.
+        run: |
+          shots="$RUNNER_TEMP/shots"
+          mkdir -p "$shots/wer"
+          cp -a "$LOCALAPPDATA"/CrashDumps/. "$shots/wer" 2>/dev/null || true
+          echo "=== WER dumps ==="; ls -la "$shots/wer"
+          echo "=== harness log ==="; tail -n 150 "$shots/selftest.log" || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-form-selftest
+          path: ${{ runner.temp }}/shots
+          if-no-files-found: ignore
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Fetch rules.dat for go:embed
+        # rules.dat is gitignored, but //go:embed needs it at build time.
+        run: |
+          curl -fsSL -o rules.dat \
+            https://github.com/wwricu/domain-list-community/releases/latest/download/rules.dat \
+            || : > rules.dat
+      - name: Drive the form windows
+        env:
+          BADPROXY_GUI_SELFTEST: "1"
+        # RUNNER_TEMP is only an environment variable, so the shots directory is
+        # exported from here rather than from a workflow expression. pipefail for
+        # the same reason as the windows job.
+        run: |
+          set -o pipefail
+          export BADPROXY_SELFTEST_SHOTS="$RUNNER_TEMP/shots"
+          mkdir -p "$BADPROXY_SELFTEST_SHOTS"
+          go test -tags production -count=1 -v -timeout 15m . \
+            2>&1 | tee "$BADPROXY_SELFTEST_SHOTS/selftest.log"
+      - name: Collect crash reports
+        if: always()
+        # An NSException aborts the process and the reason lands in stderr and in
+        # the crash report, neither of which the job log shows by itself.
+        run: |
+          shots="$RUNNER_TEMP/shots"
+          mkdir -p "$shots/crashreports"
+          cp -a "$HOME/Library/Logs/DiagnosticReports/." "$shots/crashreports" 2>/dev/null || true
+          echo "=== crash reports ==="; ls -la "$shots/crashreports"
+          echo "=== harness log ==="; tail -n 150 "$shots/selftest.log" || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-form-selftest
+          path: ${{ runner.temp }}/shots
+          if-no-files-found: ignore

@@ -7,6 +7,12 @@ on:
 permissions:
   contents: write
 
+# Re-cutting a tag onto a new commit abandons the run the old commit started;
+# letting that one finish would only burn the same mac minutes twice.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # No behavioural gate: both platform builds run immediately and the publish is
   # gated only on the artifacts existing. The self-test harnesses are still in
