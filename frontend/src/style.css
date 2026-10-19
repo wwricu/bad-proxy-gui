@@ -401,13 +401,17 @@ body.form-page {
 }
 
 /* The rules line only exists when the updater has said something, so an empty
-   one must not spend a row of the form. */
+   one must not spend a row of the form. It shares the button row with the
+   button it is about, and a long failure wraps inside the room left over
+   instead of pushing Cancel and OK off the edge. */
 .rules-msg {
-    margin-top: 10px;
+    flex: 1 1 auto;
+    min-width: 0;
     font-size: 12px;
     line-height: 1.35;
     color: #22262b;
-    white-space: pre-wrap;
+    text-align: left;
+    overflow-wrap: anywhere;
 }
 
 .rules-msg:empty {
@@ -440,15 +444,28 @@ body.form-page {
 .sheet-actions {
     flex: none;
     display: flex;
+    align-items: center;
     justify-content: flex-end;
     gap: 8px;
     padding: 16px;
 }
 
-/* One action belongs to the form rather than to leaving it: it holds the left
-   edge and the row's gap keeps it off its neighbours. */
-.sheet-actions .btn-left {
-    margin-right: auto;
+/* The updater and its sentence are one group, and the group - not the button -
+   is what takes the slack. That keeps Cancel and OK in the corner whether or
+   not there is anything to report, and keeps the message from being measured
+   against the whole row. */
+.sheet-actions .row-left {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* The message gives, the button does not: a wrapped "Update rules" is a worse
+   outcome than a wrapped sentence about what the download did. */
+.sheet-actions .row-left > button {
+    flex: none;
 }
 
 .btn-primary,

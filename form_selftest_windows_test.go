@@ -555,16 +555,30 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 			// The updater is in the button row and not in the form: it belongs to
 			// the window. It holds the row's left edge as firmly as OK holds the
 			// right, which is the one promise that survives the padding changing.
+			// Its message is measured with text in it - empty, it is display:none
+			// and reports nothing - and the text chosen is the longest thing the
+			// updater can say, because that is the case where the row could
+			// overflow. It is taken back out afterwards so the fit numbers around
+			// it stay the ones the window was sized for.
 			updater: (() => {
 				const b = document.getElementById("sUpdateRules");
+				const m = document.getElementById("sRulesMsg");
+				m.textContent = "download was only 512 bytes, too small to be the " +
+					"rules dataset - keeping the current one";
 				const row = document.querySelector(".sheet-actions");
 				const rr = row.getBoundingClientRect();
 				const br = b.getBoundingClientRect();
 				const cr = document.getElementById("settingsCancel").getBoundingClientRect();
 				const ok = document.getElementById("settingsOK").getBoundingClientRect();
-				return {same: b.parentElement === row, first: br.right < cr.left,
-						leftGap: Math.round(br.left - rr.left),
-						rightGap: Math.round(rr.right - ok.right)};
+				const mr = m.getBoundingClientRect();
+				const out = {same: b.parentElement.parentElement === row,
+					first: br.right < cr.left,
+					leftGap: Math.round(br.left - rr.left),
+					rightGap: Math.round(rr.right - ok.right),
+					beside: mr.width > 0 && mr.left >= br.right,
+					clear: Math.round(cr.left - mr.right)};
+				m.textContent = "";
+				return out;
 			})(),
 			inner: [window.innerWidth, window.innerHeight],
 		}))()`, func(s string) bool {
@@ -577,6 +591,8 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 			First    bool `json:"first"`
 			LeftGap  int  `json:"leftGap"`
 			RightGap int  `json:"rightGap"`
+			Beside   bool `json:"beside"`
+			Clear    int  `json:"clear"`
 		} `json:"updater"`
 	}
 	c.check(json.Unmarshal([]byte(prefill), &row) == nil, "the settings page reports its button row: %s", prefill)
@@ -585,6 +601,9 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 	c.check(row.Updater.LeftGap == row.Updater.RightGap && row.Updater.LeftGap > 0,
 		"the updater holds the row's left edge as firmly as OK holds the right: %d and %d",
 		row.Updater.LeftGap, row.Updater.RightGap)
+	c.check(row.Updater.Beside && row.Updater.Clear > 0,
+		"the updater's message sits to its right and stops short of Cancel: %d px clear",
+		row.Updater.Clear)
 	c.check(strings.Contains(prefill, `"loginRow":"flex"`), "the start-at-login row is offered on Windows")
 	c.check(strings.Contains(prefill, `"scroll":false`), "the settings form needs no scrollbar: %s", prefill)
 	c.check(gutterOf(prefill) == 0, "the fitted settings window keeps no scrollbar gutter: %s", prefill)

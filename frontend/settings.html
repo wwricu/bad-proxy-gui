@@ -39,20 +39,22 @@
                     <label for="sTray">Hide tray icon (after restart)</label>
                 </div>
             </div>
-            <!-- Routing rules live in rules.dat, shipped with the app and read
-                 when the engine starts. The button that pulls a newer dataset
-                 sits with the window's other buttons; this line is where it
-                 reports what happened. -->
-            <p id="sRulesMsg" class="rules-msg" aria-live="polite"></p>
             <!-- Where an OK that did not take effect says why, beside the box
                  that caused it. -->
             <div id="sMsg" class="form-msg" aria-live="polite"></div>
         </div>
         <div class="sheet-actions">
-            <!-- The updater is a tool the window offers, not a way to leave it,
-                 so it takes the far end of the row and the decision keeps the
-                 corner the eye expects. -->
-            <button id="sUpdateRules" class="btn-secondary btn-left">Update rules</button>
+            <!-- Routing rules live in rules.dat, shipped with the app and read
+                 when the engine starts. The updater is a tool the window offers,
+                 not a way to leave it, so it takes the row's left end and the
+                 decision keeps the corner the eye expects. What it reports goes
+                 beside it, not on a line above the row: the sentence is about
+                 that button, and a row of its own for a line that is empty
+                 until the download finishes is a hole in the form. -->
+            <div class="row-left">
+                <button id="sUpdateRules" class="btn-secondary">Update rules</button>
+                <p id="sRulesMsg" class="rules-msg" aria-live="polite"></p>
+            </div>
             <button id="settingsCancel" class="btn-secondary">Cancel</button>
             <button id="settingsOK" class="btn-primary">OK</button>
         </div>
