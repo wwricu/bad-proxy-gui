@@ -361,13 +361,11 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 	fmt.Printf("  note   the form outlives its own Hide while the list is up: form=%v\n",
 		settings.IsVisible())
 	a.hideToTray()
-	time.Sleep(800 * time.Millisecond)
-	c.check(!win.IsVisible() && !settings.IsVisible(),
+	c.check(waitVisible(false, 5*time.Second, win, settings),
 		"hiding to the tray takes the form with the list: main=%v form=%v",
 		win.IsVisible(), settings.IsVisible())
 	a.showWindow()
-	time.Sleep(800 * time.Millisecond)
-	c.check(win.IsVisible() && settings.IsVisible(),
+	c.check(waitVisible(true, 5*time.Second, win, settings),
 		"reopening brings both back: main=%v form=%v", win.IsVisible(), settings.IsVisible())
 
 	c.shot("form-selftest-darwin")
@@ -548,6 +546,28 @@ func waitClosed(a *App, name string, limit time.Duration) bool {
 		time.Sleep(100 * time.Millisecond)
 	}
 	return false
+}
+
+// waitVisible polls until every window reports `want`, and gives up at limit.
+// The tray checks need this rather than a sleep: the form disappears because
+// AppKit releases it along with its owner, and on a loaded runner that
+// handover has been measured taking longer than any sleep worth waiting
+// through. A form that never hides still fails, five seconds later.
+func waitVisible(want bool, limit time.Duration, windows ...application.Window) bool {
+	deadline := time.Now().Add(limit)
+	for {
+		done := true
+		for _, w := range windows {
+			if w.IsVisible() != want {
+				done = false
+				break
+			}
+		}
+		if done || time.Now().After(deadline) {
+			return done
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 }
 
 func formName(w application.Window) string {

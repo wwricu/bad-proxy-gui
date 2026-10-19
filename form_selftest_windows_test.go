@@ -679,13 +679,11 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 		// its own, so the app takes it along. Drive the app's own entry points
 		// rather than Show/Hide on the windows.
 		a.hideToTray()
-		time.Sleep(400 * time.Millisecond)
-		c.check(!win.IsVisible() && !form.IsVisible(),
+		c.check(waitVisible(false, 5*time.Second, win, form),
 			"hiding to the tray takes the form with the list: main=%v form=%v",
 			win.IsVisible(), form.IsVisible())
 		a.showWindow()
-		time.Sleep(400 * time.Millisecond)
-		c.check(win.IsVisible() && form.IsVisible() && aboveInStack(form, win),
+		c.check(waitVisible(true, 5*time.Second, win, form) && aboveInStack(form, win),
 			"reopening brings both back, the form on top: main=%v form=%v",
 			win.IsVisible(), form.IsVisible())
 
@@ -982,6 +980,28 @@ func waitClosed(a *App, name string, limit time.Duration) bool {
 		time.Sleep(100 * time.Millisecond)
 	}
 	return false
+}
+
+// waitVisible polls until every window reports `want`, and gives up at limit.
+// The tray checks need this rather than a sleep: the form disappears because
+// the toolkit releases it along with its owner, and that handover is not
+// something a fixed 400 ms can promise on a loaded runner. A form that never
+// hides still fails, five seconds later.
+func waitVisible(want bool, limit time.Duration, windows ...application.Window) bool {
+	deadline := time.Now().Add(limit)
+	for {
+		done := true
+		for _, w := range windows {
+			if w.IsVisible() != want {
+				done = false
+				break
+			}
+		}
+		if done || time.Now().After(deadline) {
+			return done
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 }
 
 // formName keeps a closed window out of a failure message.
