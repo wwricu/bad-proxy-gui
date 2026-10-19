@@ -1,8 +1,7 @@
 :root {
     /* The bar's height is needed twice: the bar itself and the list above it,
-       which is sized as the viewport minus the bar. 44 is two text lines
-       (11px label over 12.5px value) plus the breathing room a bar needs. */
-    --bar-height: 44px;
+       which is sized as the viewport minus the bar. */
+    --bar-height: 36px;
 }
 
 * {
@@ -129,13 +128,13 @@ body {
 /* Facts are text on the bar, not fields on it: a white box with a border is
    what every input here looks like, and none of this can be typed into. The
    hairline between pairs is what a native status bar uses to group columns.
-   Each pair stacks instead of running side by side: laid out in a row the
-   column is label + value wide, and four of those decided the window's floor.
-   Piled up it is the wider of the two, which is what let the window halve. */
+   Label and value stay on one line. Stacking them saves the bar about 180 px
+   of width, and it is not worth it: a status bar reads as a row of columns,
+   and two rows of it is a different object. */
 .readout {
     display: flex;
-    flex-direction: column;
-    align-items: flex-end;
+    align-items: baseline;
+    gap: 3px;
     padding: 0 5px;
     white-space: nowrap;
     border-left: 1px solid #dcdfe4;
@@ -160,7 +159,6 @@ body {
     font-size: 12.5px;
     color: #22262b;
     font-variant-numeric: tabular-nums;
-    line-height: 1.3;
 }
 
 .status {

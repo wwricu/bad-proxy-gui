@@ -39,13 +39,15 @@ const mainWindowName = "main"
 // the time, so every pixel of slack between the actions and the facts shows as
 // a hole in the middle of the bar.
 const (
-	// The main window is never narrower than a form window: it is the window you
-	// live in, and having the dialog that pops out of it be wider than it is
-	// reads as a mistake. The bar itself only needs 298 of these 460.
-	mainWindowMinW    = formWindowWidth
-	mainWindowRowH    = 63 // one node row: 13+14+8+14+13+1 px
-	mainWindowListH   = 4  // the gap .node-list keeps from the window's top edge
-	mainWindowBarH    = 44 // two bar lines: the 11 px label over its 12.5 px value
+	// The bar decides this, not the form windows: with each fact on one line the
+	// four of them plus the two buttons need what they need, and a window
+	// narrower than that clips the facts off the right edge. It lands above
+	// formWindowWidth anyway, so the list window is never narrower than a dialog
+	// that opens out of it.
+	mainWindowMinW    = 488
+	mainWindowRowH    = 63  // one node row: 13+14+8+14+13+1 px
+	mainWindowListH   = 4   // the gap .node-list keeps from the window's top edge
+	mainWindowBarH    = 36
 	mainWindowChromeH = 44 // caption and border: 31 on mac, 39 on Windows at 100%
 	mainWindowMinRows = 4  // the floor is this many node rows tall
 )
