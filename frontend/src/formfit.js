@@ -8,15 +8,27 @@ import { API } from './bridge.js';
 // a frame that changes size with the display's scaling, and macOS sizes the frame
 // when asked to resize but sized the content when asked to create, so the same
 // number means two different windows. So the page asks, reads back what it got,
-// and asks again for the difference - a few times at most.
+// and asks again for the difference.
+//
+// The difference is signed, because the guess can be wrong in either direction and
+// both are visible: a window that comes out shorter than the form gets a
+// scrollbar, and one that comes out taller parks its buttons above a band of bare
+// window. What the platform kept back is measured from the last answer, so the
+// second ask is right whether the first guess was too small or too large.
+//
+// macOS animates a resize, so an answer read while the window is moving is not
+// the answer - and correcting against it restarts the animation from wherever it
+// had got to. So the page waits for the height to stop changing before it judges
+// it, and stops trying after a moment in case something is holding the window.
 //
 // Both form windows are created with resizing off, so a height that does not match
 // the form can only be the window's mistake, never the user's. That is what makes
-// it safe to correct in either direction.
-const maxTries = 4;
+// it safe to keep correcting on every resize.
+const settleTime = 150;
+const giveUpTime = 3000;
 
 let asked = 0;
-let tries = 0;
+let deadline = 0;
 let timer = 0;
 
 function wantedHeight() {
@@ -32,34 +44,38 @@ function wantedHeight() {
     return Math.max(body.scrollHeight, body.offsetHeight) + actions.offsetHeight + 2;
 }
 
-function settle() {
-    clearTimeout(timer);
-    // macOS animates a resize, so the height measured just after the ask is not
-    // the height the window ends at. Judge it once it stops moving.
-    timer = setTimeout(correct, 200);
+function ask(height) {
+    asked = height;
+    API().FitFormWindow(height);
+    watch();
 }
 
-function correct() {
-    if (!tries) return;
+function judge() {
+    if (!asked) return;
     const wanted = wantedHeight();
     const got = window.innerHeight;
-    // A window a few pixels taller than its form is the form sitting at the top
-    // of it, which is what the spare room is for; one shorter is a scrollbar.
-    if (got >= wanted && got <= wanted + 6) return;
-    if (tries++ >= maxTries) return;
-    // What the platform kept back on the last answer is the best estimate of what
-    // it will keep back on this one. It is measured, not guessed, so the scaling
-    // that makes Windows' frame three pixels wider cannot strand one.
-    asked = wanted + Math.max(0, asked - got);
-    API().FitFormWindow(asked);
-    settle();
+    // A window up to six pixels taller than its form is the form sitting at the
+    // top of it, which is what the spare room is for. Anything else is a frame
+    // that was not what the page guessed, and the gap between what was asked for
+    // and what arrived is that frame, measured rather than assumed.
+    if (got >= wanted && got <= wanted + 6) { asked = 0; return; }
+    if (Date.now() > deadline) { asked = 0; return; }
+    ask(wanted + (asked - got));
+}
+
+function watch() {
+    clearTimeout(timer);
+    const height = window.innerHeight;
+    // Two reads the same distance apart, and the window has stopped moving.
+    timer = setTimeout(() => {
+        if (window.innerHeight !== height) { watch(); return; }
+        judge();
+    }, settleTime);
 }
 
 export function fitFormWindow() {
-    asked = wantedHeight();
-    tries = 1;
-    API().FitFormWindow(asked);
-    settle();
+    deadline = Date.now() + giveUpTime;
+    ask(wantedHeight());
 }
 
-window.addEventListener('resize', settle);
+window.addEventListener('resize', watch);
