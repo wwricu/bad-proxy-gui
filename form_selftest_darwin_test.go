@@ -288,6 +288,7 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 	c.check(win.IsVisible() && settings.IsVisible(),
 		"reopening brings both back: main=%v form=%v", win.IsVisible(), settings.IsVisible())
 
+	c.check(false, "TEMPORARY: a failed check has to fail the run")
 	c.shot("form-selftest-darwin")
 	// No Quit: it would take the process with it before the tally is read.
 }
