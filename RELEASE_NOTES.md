@@ -23,6 +23,13 @@ with a domain routing list, driving one or more outbound nodes.
 * Only one form window at a time: a second request raises the open one and the
   operating system asks for attention on its own instead of stacking another
   editor over a state it would each write back stale.
+* Fix: the editor scrolled on a Windows display at 100% scaling and the
+  settings window left a band of empty window under its buttons on macOS. A
+  field and a popup are drawn by the operating system, so each platform's forms
+  are now measured on the platform they run on.
+* The main window opens 640 px wide rather than 800; the row menu offers Edit
+  before Test; the macOS menu-bar item is a template image now, so it takes the
+  bar's own colour instead of showing the app icon's white tile.
 
 ## Known limitations
 
