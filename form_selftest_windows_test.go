@@ -221,8 +221,8 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 
 	// The minimum size is what the layout has to survive: the bar's three zones
 	// stay reachable and the delete card still fits. The readouts are measured
-	// with the longest words they can hold, because "Direct" is not what sets
-	// the width.
+	// with the longest words they can hold - "System" and "Bypass GFW" - because
+	// the mode the app happens to start in is not what sets the width.
 	win.SetSize(minW, minH)
 	time.Sleep(800 * time.Millisecond)
 	fits := probe(win, probes, `
@@ -231,12 +231,19 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 			const bar = document.querySelector(".status-bar");
 			const set = (id, v) => { document.getElementById(id).textContent = v; };
 			const back = ["roMode","roRouting"].map(id => document.getElementById(id).textContent);
-			set("roMode","System proxy"); set("roRouting","Bypass GFW");
+			set("roMode", "System"); set("roRouting", "Bypass GFW");
 			const box = (id) => {
 				const r = document.getElementById(id).getBoundingClientRect();
 				return [Math.round(r.left), Math.round(r.right), Math.round(r.width)];
 			};
 			const facts = [...document.querySelectorAll(".readout")];
+			// Both paddings are read from the page, not assumed: the last time the
+			// bar's arithmetic was written down by hand it went stale and the
+			// floor was 2 px narrower than the bar for a whole release.
+			const pad = (id) => {
+				const s = getComputedStyle(document.getElementById(id));
+				return Math.round(parseFloat(s.paddingLeft) + parseFloat(s.paddingRight));
+			};
 			const out = {
 				page: [d.scrollWidth, d.clientWidth, d.scrollHeight, d.clientHeight],
 				bar: [bar.clientWidth, bar.scrollWidth],
@@ -246,6 +253,7 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 				factsRight: Math.round(facts[facts.length - 1].getBoundingClientRect().right),
 				wide: facts.map(el => Math.round(el.getBoundingClientRect().width)),
 				actions: Math.round(document.querySelector(".bar-actions").getBoundingClientRect().width),
+				barPad: pad("statusBar"), statusPad: pad("statusText"),
 				inner: d.clientWidth};
 			set("roMode", back[0]); set("roRouting", back[1]);
 			return out;
@@ -261,12 +269,19 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 		FactsRight int    `json:"factsRight"`
 		Wide       []int  `json:"wide"`
 		Actions    int    `json:"actions"`
+		BarPad     int    `json:"barPad"`
+		StatusPad  int    `json:"statusPad"`
 		Inner      int    `json:"inner"`
 	}
 	c.check(json.Unmarshal([]byte(fits), &layout) == nil, "the window reports its own layout: %s", fits)
-	fmt.Printf("  bar    actions=%d readouts=%v needs=%d of %d\n",
-		layout.Actions, layout.Wide, layout.Actions+sum(layout.Wide)+20, layout.Inner)
+	// What the bar would ask for if every element got its own smallest legal box.
+	// The floor is set from this number, so the two have to be compared.
+	needs := layout.Actions + sum(layout.Wide) + layout.BarPad + layout.StatusPad
+	fmt.Printf("  bar    actions=%d readouts=%v pads=%d+%d needs=%d of %d\n",
+		layout.Actions, layout.Wide, layout.BarPad, layout.StatusPad, needs, layout.Inner)
 	if layout.Inner > 0 {
+		c.check(needs <= layout.Inner,
+			"the minimum width is wide enough for the whole bar: needs %d, has %d", needs, layout.Inner)
 		c.check(layout.Page[0] <= layout.Page[1]+1, "the page itself does not overflow: %v", layout.Page)
 		c.check(layout.Bar[1] <= layout.Bar[0]+1, "the status bar is not wider than the window: %v", layout.Bar)
 		c.check(layout.AddLabel == "", "the add button is an icon, not a word: %q", layout.AddLabel)
@@ -276,6 +291,13 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 		c.check(layout.FactsRight >= layout.Inner-10 && layout.FactsRight <= layout.Inner,
 			"the facts hold the right edge: %d of %d", layout.FactsRight, layout.Inner)
 		c.check(layout.Status[2] > 0, "the message space still has room at the minimum width: %d px", layout.Status[2])
+		// The floor promises rows you can see, and a window height is not a
+		// client height: the caption and the border are charged first, which is
+		// why this reads the page back instead of trusting the constant.
+		listH := layout.Page[3] - mainWindowBarH
+		c.check(listH >= mainWindowListH+mainWindowMinRows*mainWindowRowH,
+			"the minimum height shows %d whole node rows: the list has %d px of %d",
+			mainWindowMinRows, listH, layout.Page[3])
 	}
 	c.shot(win, "main-minimum")
 
@@ -526,11 +548,39 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 			})(),
 			below: Math.round(window.innerHeight -
 				document.querySelector(".sheet-actions").getBoundingClientRect().bottom),
+			// The updater is in the button row and not in the form: it belongs to
+			// the window. It holds the row's left edge as firmly as OK holds the
+			// right, which is the one promise that survives the padding changing.
+			updater: (() => {
+				const b = document.getElementById("sUpdateRules");
+				const row = document.querySelector(".sheet-actions");
+				const rr = row.getBoundingClientRect();
+				const br = b.getBoundingClientRect();
+				const cr = document.getElementById("settingsCancel").getBoundingClientRect();
+				const ok = document.getElementById("settingsOK").getBoundingClientRect();
+				return {same: b.parentElement === row, first: br.right < cr.left,
+						leftGap: Math.round(br.left - rr.left),
+						rightGap: Math.round(rr.right - ok.right)};
+			})(),
 			inner: [window.innerWidth, window.innerHeight],
 		}))()`, func(s string) bool {
 		return strings.Contains(s, `"ports":"11909/11908"`) && fitted(s) && loopDone(s)
 	}, 10*time.Second)
 	c.check(strings.Contains(prefill, `"mode":"direct"`), "settings opens with the saved mode")
+	var row struct {
+		Updater struct {
+			Same     bool `json:"same"`
+			First    bool `json:"first"`
+			LeftGap  int  `json:"leftGap"`
+			RightGap int  `json:"rightGap"`
+		} `json:"updater"`
+	}
+	c.check(json.Unmarshal([]byte(prefill), &row) == nil, "the settings page reports its button row: %s", prefill)
+	c.check(row.Updater.Same && row.Updater.First,
+		"the rules updater shares the button row, ahead of Cancel: %s", prefill)
+	c.check(row.Updater.LeftGap == row.Updater.RightGap && row.Updater.LeftGap > 0,
+		"the updater holds the row's left edge as firmly as OK holds the right: %d and %d",
+		row.Updater.LeftGap, row.Updater.RightGap)
 	c.check(strings.Contains(prefill, `"loginRow":"flex"`), "the start-at-login row is offered on Windows")
 	c.check(strings.Contains(prefill, `"scroll":false`), "the settings form needs no scrollbar: %s", prefill)
 	c.check(gutterOf(prefill) == 0, "the fitted settings window keeps no scrollbar gutter: %s", prefill)

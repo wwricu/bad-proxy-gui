@@ -20,33 +20,44 @@ const windowTitle = "Bad Proxy GUI"
 const mainWindowName = "main"
 
 // The main window is sized by its own content now that the forms have moved
-// out: the status bar, whose fixed parts - two actions and four readouts
-// holding their longest words - need 533 px of *client* width at this machine's
-// scaling, leaving the rest for the message line. Text does not scale evenly, so
-// the same bar needs 546 px on a display at 100%, and the floor is that worst
-// case plus the frame, which is 13 px wide at 175% and 16 at 100%. Setting the
-// floor by the thinner frame instead leaves a machine at 100% with 544 px of
-// client and the facts hanging over the edge, which is what the self-test's
-// width checks look for. The height floor is one node row plus the bar, so an
-// empty list does not look like a band of bare window under the last item.
+// out: the status bar, whose fixed parts - two actions and four readouts holding
+// their longest words - need 483 px of *client* width, leaving the rest for the
+// message line. That number is what the self-test measured on this machine, and
+// text does not scale evenly, so a display at another scaling can ask for a few
+// pixels more. The floor is it plus the frame, which is 13 px wide at 175% and
+// 16 at 100%, plus that margin. Setting the floor by the thinner frame instead
+// leaves a machine at 100% with the facts hanging over the edge, which is what
+// the width checks look for.
+//
+// The height floor is three node rows plus the bar: a list shorter than that is
+// unusable to click in, whatever it costs an empty list in bare window. A window
+// height is not a client height - the caption and the border are charged before
+// the page sees anything - so the floor counts them too, and the self-test reads
+// the list back to check it got three whole rows rather than trusting this sum.
 //
 // The default matches the floor on purpose: the message line is empty most of
 // the time, so every pixel of slack between the actions and the facts shows as
 // a hole in the middle of the bar.
 const (
-	mainWindowMinW = 562 // 546 of bar + the 16 px frame of a display at 100%
-	mainWindowRowH = 63  // one node row: 13+14+8+14+13+1 px
-	mainWindowBarH = 36
+	mainWindowMinW    = 512 // 483 of bar + the 16 px frame of a display at 100% + slack
+	mainWindowRowH    = 63  // one node row: 13+14+8+14+13+1 px
+	mainWindowListH   = 4   // the gap .node-list keeps from the window's top edge
+	mainWindowBarH    = 36
+	mainWindowChromeH = 36 // caption and border, measured off a live window
+	mainWindowMinRows = 3  // the floor is this many node rows tall
 )
 
 // mainWindowSize returns the initial width/height and the minimums. Width is
 // fixed (the bar decides it); height grows with the number of saved nodes so
-// the list always has room for one extra row.
+// the list always has room for one extra row, and never less than the floor.
 func mainWindowSize(nodeCount int) (w, h, minW, minH int) {
 	w = mainWindowMinW
 	minW = mainWindowMinW
-	minH = mainWindowBarH + mainWindowRowH // one node + the bar
-	h = mainWindowBarH + (nodeCount+1)*mainWindowRowH
+	inside := func(rows int) int {
+		return mainWindowChromeH + mainWindowBarH + mainWindowListH + rows*mainWindowRowH
+	}
+	minH = inside(mainWindowMinRows)
+	h = inside(nodeCount + 1)
 	if h < minH {
 		h = minH
 	}

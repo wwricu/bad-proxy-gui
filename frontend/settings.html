@@ -16,7 +16,7 @@
                 <select id="sMode">
                     <option value="direct">Direct</option>
                     <option value="proxy">Proxy</option>
-                    <option value="system">System proxy</option>
+                    <option value="system">System</option>
                 </select>
                 <label>Routing</label>
                 <select id="sRouting">
@@ -40,17 +40,19 @@
                 </div>
             </div>
             <!-- Routing rules live in rules.dat, shipped with the app and read
-                 when the engine starts. This pulls the newest dataset from the
-                 upstream repo and restarts the engine so it takes effect. -->
-            <div class="rules-row">
-                <button id="sUpdateRules" class="btn-secondary">Update rules</button>
-                <span id="sRulesMsg" class="rules-msg" aria-live="polite"></span>
-            </div>
+                 when the engine starts. The button that pulls a newer dataset
+                 sits with the window's other buttons; this line is where it
+                 reports what happened. -->
+            <p id="sRulesMsg" class="rules-msg" aria-live="polite"></p>
             <!-- Where an OK that did not take effect says why, beside the box
                  that caused it. -->
             <div id="sMsg" class="form-msg" aria-live="polite"></div>
         </div>
         <div class="sheet-actions">
+            <!-- The updater is a tool the window offers, not a way to leave it,
+                 so it takes the far end of the row and the decision keeps the
+                 corner the eye expects. -->
+            <button id="sUpdateRules" class="btn-secondary btn-left">Update rules</button>
             <button id="settingsCancel" class="btn-secondary">Cancel</button>
             <button id="settingsOK" class="btn-primary">OK</button>
         </div>

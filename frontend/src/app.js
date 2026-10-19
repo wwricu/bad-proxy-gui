@@ -9,7 +9,11 @@ let ctxIdx = -1;        // node under the context menu
 
 // The status bar and the settings window name the same choices with the same
 // words, so a mode is one thing on screen.
-const MODE_LABELS = { direct: 'Direct', proxy: 'Proxy', system: 'System proxy' };
+//
+// "System" and not "System proxy" because this line is the bar's floor: the
+// longest words in these two maps are what the window has to hold, and the
+// column label already says which of the three the value is.
+const MODE_LABELS = { direct: 'Direct', proxy: 'Proxy', system: 'System' };
 const ROUTING_LABELS = { global: 'Global', 'cn-whitelist': 'Bypass CN', 'gfw-blacklist': 'Bypass GFW' };
 
 async function loadState() {

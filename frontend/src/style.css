@@ -119,7 +119,7 @@ body {
     height: var(--bar-height);
     display: flex;
     align-items: center;
-    padding: 0 10px;
+    padding: 0 8px;
     background: #eef1f4;
     border-top: 1px solid #d2d7de;
     gap: 0;
@@ -131,8 +131,8 @@ body {
 .readout {
     display: flex;
     align-items: baseline;
-    gap: 5px;
-    padding: 0 10px;
+    gap: 4px;
+    padding: 0 7px;
     white-space: nowrap;
     border-left: 1px solid #dcdfe4;
 }
@@ -141,7 +141,7 @@ body {
     /* Every readout keeps its hairline, including the first: the facts are the
        far corner now, and the line is what separates them from the message
        space that grows and shrinks to their left. */
-    padding-left: 10px;
+    padding-left: 7px;
 }
 
 .readout label {
@@ -163,7 +163,7 @@ body {
     min-width: 0;
     font-size: 11.5px;
     color: #697079;
-    padding: 0 10px;
+    padding: 0 8px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -397,17 +397,14 @@ body.form-page {
     text-align: left;
 }
 
-.rules-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-top: 14px;
-}
-
+/* The rules line only exists when the updater has said something, so an empty
+   one must not spend a row of the form. */
 .rules-msg {
+    margin-top: 10px;
     font-size: 12px;
     line-height: 1.35;
     color: #22262b;
+    white-space: pre-wrap;
 }
 
 .rules-msg:empty {
@@ -443,6 +440,12 @@ body.form-page {
     justify-content: flex-end;
     gap: 8px;
     padding: 16px;
+}
+
+/* One action belongs to the form rather than to leaving it: it holds the left
+   edge and the row's gap keeps it off its neighbours. */
+.sheet-actions .btn-left {
+    margin-right: auto;
 }
 
 .btn-primary,

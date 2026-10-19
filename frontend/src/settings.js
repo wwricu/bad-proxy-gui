@@ -5,7 +5,7 @@ import { Window } from "/wails/runtime.js";
 // The settings window is the only settings UI on every platform. Nothing here
 // applies until OK.
 
-const MODE_LABELS = { direct: 'Direct', proxy: 'Proxy', system: 'System proxy' };
+const MODE_LABELS = { direct: 'Direct', proxy: 'Proxy', system: 'System' };
 const ROUTING_LABELS = { global: 'Global', 'cn-whitelist': 'Bypass CN', 'gfw-blacklist': 'Bypass GFW' };
 
 // A setting that failed to take effect is read beside the box that caused it,

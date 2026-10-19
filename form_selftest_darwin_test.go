@@ -188,6 +188,38 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 		}))()`, func(s string) bool { return strings.Contains(s, "11909") }, 30*time.Second)
 	c.check(strings.Contains(state, `"rows":1`), "the list window drew the seeded node: %s", state)
 
+	// ---- the minimum size ----
+	// The floor is a promise about the list, and a window height is not a client
+	// height: AppKit charges the caption before the page sees anything, and it
+	// charges a different amount than Win32 does. So the arithmetic in main.go is
+	// read back off the page here rather than trusted.
+	fw, fh, minW, minH := mainWindowSize(len(a.st.Nodes))
+	win.SetSize(minW, minH)
+	time.Sleep(800 * time.Millisecond)
+	floor := probe(win, probes, `
+		(() => {
+			const d = document.documentElement;
+			const bar = document.querySelector(".status-bar");
+			return {client: [d.clientWidth, d.clientHeight],
+					bar: [bar.clientWidth, bar.scrollWidth]};
+		})()`)
+	var floorBox struct {
+		Client [2]int `json:"client"`
+		Bar    [2]int `json:"bar"`
+	}
+	c.check(json.Unmarshal([]byte(floor), &floorBox) == nil, "the window reports its own floor: %s", floor)
+	fmt.Printf("  main   floor: window=%dx%d client=%dx%d bar=%v\n",
+		minW, minH, floorBox.Client[0], floorBox.Client[1], floorBox.Bar)
+	if floorBox.Client[1] > 0 {
+		c.check(floorBox.Bar[1] <= floorBox.Bar[0]+1,
+			"the whole bar fits the floor width: %v", floorBox.Bar)
+		listH := floorBox.Client[1] - mainWindowBarH
+		c.check(listH >= mainWindowListH+mainWindowMinRows*mainWindowRowH,
+			"the floor shows %d whole node rows: the list has %d px", mainWindowMinRows, listH)
+	}
+	win.SetSize(fw, fh)
+	time.Sleep(400 * time.Millisecond)
+
 	// ---- the row menu ----
 	// macOS has no native shortcut menu behind this, so the DOM menu is what the
 	// user gets, and the list the Windows build hands its OS menu is read from
