@@ -1,12 +1,19 @@
 name: macOS form self-test
 
 # The form-window harness needs a window server, so it cannot run on this
-# machine and it is not part of every push (mac runners bill at a multiple of
-# Linux ones). Dispatch it, or push a diag/** branch to run it from there.
+# machine. It runs on main because nothing else ever drove these windows on
+# macOS, and the editor crash went out in a release as a result. The repo is
+# public, so the mac minutes cost nothing but a little queue time; a push that
+# touches neither Go nor the frontend does not ask for them.
 on:
   workflow_dispatch:
   push:
-    branches: ['diag/**']
+    branches: ['main', 'diag/**']
+    paths:
+      - '*.go'
+      - 'frontend/**'
+      - 'go.mod'
+      - '.github/workflows/mac-selftest.yml'
 
 permissions:
   contents: read
