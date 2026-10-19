@@ -220,9 +220,14 @@ func probeNode(st GUIState, index int, probe func(GUIState) (time.Duration, erro
 }
 
 // waitListening returns once something accepts connections on the local port,
-// or fails after a couple of seconds of trying.
+// or gives up after eight seconds of asking. The budget is not for the common
+// case - a refused connection comes back in milliseconds - but for the machine
+// that is busy: core binds its inbounds on its own clock, and on a loaded box
+// that is later than anything this loop could predict. Two seconds of that was
+// a "the test engine never came up" on a machine that was merely slow, which
+// reads to the user as a broken node.
 func waitListening(port string) error {
-	for attempt := 0; attempt < 40; attempt++ {
+	for attempt := 0; attempt < 160; attempt++ {
 		conn, err := net.DialTimeout("tcp", "127.0.0.1:"+port, 250*time.Millisecond)
 		if err == nil {
 			return conn.Close()
