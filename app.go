@@ -60,9 +60,11 @@ func (a *App) showWindow() {
 }
 
 // hideToTray takes the windows off the screen and leaves the app running. The
-// form goes with the list because an owned window is not hidden along with its
-// owner: left behind it would float on the desktop with no taskbar button of its
-// own to reach it.
+// form is asked first because on Windows an owned window is not hidden along
+// with its owner, and left behind it would float on the desktop with no taskbar
+// button of its own to reach it. macOS is the other way round: AppKit keeps a
+// child window with its parent and will not let it hide alone, so the call
+// lands as a no-op and the list taking the form down with it is what works.
 func (a *App) hideToTray() {
 	a.hideFormWindow()
 	becomeBackground()
