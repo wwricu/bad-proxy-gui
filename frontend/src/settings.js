@@ -59,18 +59,31 @@ document.getElementById('settingsCancel').onclick = () => Window.Close();
 // downloads and restarts when there is. Neither step is instant, so the button
 // is disabled for the duration and the outcome is read inline instead of
 // closing the window.
+//
+// A dead network used to look like a frozen app for the backend's full 8s+30s
+// budget, so after 12s this says once - re-saying it would re-fit the window -
+// that the network may be down.
 document.getElementById('sUpdateRules').onclick = async () => {
     const btn = document.getElementById('sUpdateRules');
     const msg = document.getElementById('sRulesMsg');
     btn.disabled = true;
     msg.classList.add('busy');
     msg.textContent = 'Updating...';
+    let nagged = false;
+    const started = Date.now();
+    const tick = setInterval(() => {
+        if (nagged || Date.now() - started < 12000) return;
+        nagged = true;
+        msg.textContent = 'Still waiting - the network may be down.';
+        fitFormWindow();
+    }, 1000);
     try {
         msg.classList.remove('busy');
         msg.textContent = await API().UpdateRules();
     } catch (err) {
         msg.textContent = err.message;
     } finally {
+        clearInterval(tick);
         btn.disabled = false;
         fitFormWindow();
     }

@@ -41,8 +41,10 @@ const (
 	minRulesBytes = 256 * 1024
 	// A generous ceiling: the real file is far below it, and it bounds what a
 	// wrong endpoint can make the app write down.
-	maxRulesBytes        = 64 * 1024 * 1024
-	rulesDownloadTimeout = 60 * time.Second
+	maxRulesBytes = 64 * 1024 * 1024
+	// 30 s carries 2.4 MB on a slow link, and a dead network should say so
+	// inside that budget rather than after a minute of "Updating...".
+	rulesDownloadTimeout = 30 * time.Second
 	// The opening bytes kept for the shape check - enough to recognise an HTML
 	// document without holding the body that follows it.
 	rulesHeadBytes = 64
@@ -73,7 +75,9 @@ func Day(modified string) string {
 // answers a HEAD of the release alias with the asset's own validators, so the
 // ETag is the identity and Last-Modified is the date to show.
 func Upstream(url string) (etag, modified string, err error) {
-	client := &http.Client{Timeout: 15 * time.Second}
+	// 8 s: a version check that cannot answer by then is not going to - the
+	// caller falls through to the download anyway.
+	client := &http.Client{Timeout: 8 * time.Second}
 	req, err := http.NewRequest(http.MethodHead, url, nil)
 	if err != nil {
 		return "", "", err
