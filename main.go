@@ -6,6 +6,7 @@ import (
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
+	"github.com/wwricu/bad-proxy-gui/internal/platform"
 )
 
 //go:embed all:frontend
@@ -49,25 +50,31 @@ const (
 	// narrower than that clips the facts off the right edge. It lands above
 	// formWindowWidth anyway, so the list window is never narrower than a dialog
 	// that opens out of it.
-	mainWindowMinW    = 488
-	mainWindowRowH    = 63 // one node row: 13+14+8+14+13+1 px
-	mainWindowListH   = 4  // the gap .node-list keeps from the window's top edge
-	mainWindowBarH    = 36
-	mainWindowChromeH = 44 // the larger of the two platforms' charge, plus scale headroom
-	mainWindowMinRows = 4  // the floor is this many node rows tall
+	mainWindowMinW  = 488
+	mainWindowRowH  = 63 // one node row: 13+14+8+14+13+1 px
+	mainWindowListH = 4  // the gap .node-list keeps from the window's top edge
+	mainWindowBarH  = 36
+	// mainWindowChromeH is the gap between the page's pixels and the units this
+	// platform counts a window's Height and MinHeight in - per platform, and the
+	// one shared 44 it replaces left macOS able to drag a caption below its own
+	// floor. The spec files say why; the self-test reads the real page back
+	// rather than trusting either number.
+	mainWindowChromeH = platform.MainWindowChromeH
+	mainWindowMinRows = 4 // the floor is this many node rows tall
 )
 
-// mainWindowSize returns the initial width/height and the minimums. Width is
+// mainWindowSize returns the initial width/height and the minimums, each in the
+// units this platform's convention counts (see mainWindowChromeH). Width is
 // fixed (the bar decides it); height grows with the number of saved nodes so
 // the list always has room for one extra row, and never less than the floor.
 func mainWindowSize(nodeCount int) (w, h, minW, minH int) {
 	w = mainWindowMinW
 	minW = mainWindowMinW
 	inside := func(rows int) int {
-		return mainWindowChromeH + mainWindowBarH + mainWindowListH + rows*mainWindowRowH
+		return mainWindowBarH + mainWindowListH + rows*mainWindowRowH
 	}
-	minH = inside(mainWindowMinRows)
-	h = inside(nodeCount + 1)
+	minH = inside(mainWindowMinRows) + mainWindowChromeH
+	h = inside(nodeCount + 1) + mainWindowChromeH
 	if h < minH {
 		h = minH
 	}

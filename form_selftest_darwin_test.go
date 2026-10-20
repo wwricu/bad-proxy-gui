@@ -199,6 +199,9 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 	// charges a different amount than Win32 does. So the arithmetic in main.go is
 	// read back off the page here rather than trusted.
 	fw, fh, minW, minH := mainWindowSize(len(a.st.Nodes))
+	// Height() reads the live frame: the creation must already honour the floor.
+	c.check(win.Height() >= minH,
+		"the window opens on or above its own floor: frame %d of %d", win.Height(), minH)
 	win.SetSize(minW, minH)
 	time.Sleep(800 * time.Millisecond)
 	floor := probe(win, probes, `
@@ -221,11 +224,11 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 		listH := floorBox.Client[1] - mainWindowBarH
 		c.check(listH >= mainWindowListH+mainWindowMinRows*mainWindowRowH,
 			"the floor shows %d whole node rows: the list has %d px", mainWindowMinRows, listH)
-		// The same half of the promise the Windows sheet makes: the constant has
-		// to be at least what this platform actually charges for the caption. If
-		// SetSize is answered with a content rect rather than a frame the
-		// difference is zero and this passes for nothing; the case it catches is
-		// the number drifting below reality.
+		// The same half of the promise the Windows sheet makes: the caption is
+		// charged once, from the side the convention reads it - MinHeight is a
+		// frame, the page below it is what the design asked for. If the caption
+		// grew past the constant, the difference shows here as the page coming
+		// back shorter than the floor promised.
 		c.check(minH-floorBox.Client[1] <= mainWindowChromeH,
 			"the chrome constant covers what this display charges: %d of %d",
 			minH-floorBox.Client[1], mainWindowChromeH)

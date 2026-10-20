@@ -26,6 +26,12 @@ const WindowFrameHeight = 0
 // again instead of trusting this.
 const ResizeFrameHeight = 31
 
+// MainWindowChromeH is the caption, once: the creation Height is a content rect
+// but the minimum is enforced as a frame, so both need the same 31 px added or
+// the window drags a caption below its own floor. Points are logical already -
+// no DPI headroom - and the self-test reads the real page back.
+const MainWindowChromeH = ResizeFrameHeight
+
 // The two forms' client heights: what each window opens at, before the page has
 // measured itself and asked for the height it actually needs.
 //

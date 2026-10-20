@@ -156,7 +156,8 @@ body {
 }
 
 .readout span {
-    font-size: 12.5px;
+    /* whole points only: half-pixel sizes render uneven */
+    font-size: 13px;
     color: #22262b;
     font-variant-numeric: tabular-nums;
 }
@@ -164,7 +165,7 @@ body {
 .status {
     flex: 1;
     min-width: 0;
-    font-size: 11.5px;
+    font-size: 12px;
     color: #697079;
     padding: 0 6px;
     white-space: nowrap;

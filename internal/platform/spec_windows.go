@@ -19,6 +19,11 @@ const WindowFrameHeight = 36
 // measures the difference and asks for the rest.
 const ResizeFrameHeight = WindowFrameHeight
 
+// MainWindowChromeH is the caption plus 8 px of scale headroom: Height and the
+// enforced minimum are both whole frames here, and the caption rounds from
+// physical pixels - 36 at 175%, 39 at 100% - which is what the headroom is for.
+const MainWindowChromeH = WindowFrameHeight + 8
+
 // The two forms' client heights: what each window opens at, before the page has
 // measured itself and asked for the height it actually needs.
 //
