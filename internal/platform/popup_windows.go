@@ -90,7 +90,6 @@ var (
 	menuReq     = make(chan menuRequest, 1)
 	menuReady   = make(chan struct{})
 	menuHostErr error
-	menuProcRef uintptr // keeps the window class callback alive
 )
 
 // u converts a signed coordinate to the uintptr a Win32 call expects.
@@ -144,7 +143,6 @@ func newMenuHost() (uintptr, error) {
 	cls := wndClassEx{}
 	cls.size = uint32(unsafe.Sizeof(cls))
 	cls.lpfnWndProc = syscall.NewCallback(menuHostProc)
-	menuProcRef = cls.lpfnWndProc
 	cls.hInstance, _, _ = procGetModuleHandleW.Call(0)
 	cls.lpszClassName = className
 	procRegisterClassExW.Call(uintptr(unsafe.Pointer(&cls)))

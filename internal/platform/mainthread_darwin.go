@@ -58,6 +58,11 @@ func runOnMainThread(fn func()) {
 // into Go until the exported function returns, and that thread is the main one,
 // so a task queued from there and waited on there would be waiting behind the
 // very call it is standing inside.
+//
+// A full queue is the same thread's fault - it is the run loop that empties it -
+// so the task is dropped rather than waited on. Waiting would turn a click that
+// lands on a wedged app into a second thread stuck behind it, which is a worse
+// failure than the click going nowhere.
 func PostToMainThread(fn func()) {
 	select {
 	case mainQueue <- fn:
