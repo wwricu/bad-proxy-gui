@@ -24,7 +24,6 @@ import (
 type App struct {
 	wails      *application.App
 	mainWindow application.Window
-	tray       *application.SystemTray
 	eng        engine.Engine
 	st         config.State
 	store      *config.Store
@@ -173,14 +172,12 @@ func (a *App) UpdateNode(index int, n config.Node) error {
 	return a.restartIfChanged(prev, next)
 }
 
-// DeleteNode removes a node by index.
+// DeleteNode removes a node by index. Which node the traffic goes through after
+// that is RemoveNode's decision, not this one's: deleting a row the user is not
+// using must not change the row they are.
 func (a *App) DeleteNode(index int) error {
 	prev, next, err := a.edit(func(s *config.State) error {
-		if index < 0 || index >= len(s.Nodes) {
-			return fmt.Errorf("invalid index: %d", index)
-		}
-		s.Nodes = append(s.Nodes[:index:index], s.Nodes[index+1:]...)
-		return nil
+		return s.RemoveNode(index)
 	})
 	if err != nil {
 		return err

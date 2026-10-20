@@ -32,5 +32,4 @@ func setupTray(a *App, wails *application.App) {
 	menu := wails.NewMenu()
 	menu.Add("Quit").OnClick(func(*application.Context) { a.quit() })
 	tray.SetMenu(menu)
-	a.tray = tray
 }
