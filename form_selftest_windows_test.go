@@ -554,6 +554,12 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 		(() => ({
 			ports: ["sHttpPort","sSocksPort"].map(id => document.getElementById(id).value).join("/"),
 			mode: document.getElementById("sMode").value,
+			// Which modes and which rows the OS offers is answered by a binding, and
+			// a binding that stops answering reads as false: the option is removed
+			// and the row hidden, with nothing said anywhere. Both have been lost
+			// that way, so both are read back here.
+			modeOpts: [...document.getElementById("sMode").options].map(o => o.value).join(","),
+			trayRow: getComputedStyle(document.getElementById("sTrayRow")).display,
 			loginRow: getComputedStyle(document.getElementById("sLoginRow")).display,
 			scroll: document.querySelector(".sheet-body").scrollHeight >
 			        document.querySelector(".sheet-body").clientHeight,
@@ -649,6 +655,10 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 		"the updater's message sits to its right and stops short of Cancel: %d px clear",
 		row.Updater.Clear)
 	c.check(strings.Contains(prefill, `"loginRow":"flex"`), "the start-at-login row is offered on Windows")
+	c.check(strings.Contains(prefill, `"trayRow":"flex"`),
+		"the hide-tray row is offered on Windows: %s", prefill)
+	c.check(strings.Contains(prefill, `"modeOpts":"direct,proxy,system"`),
+		"the mode dropdown still offers the system proxy: %s", prefill)
 	c.check(strings.Contains(prefill, `"scroll":false`), "the settings form needs no scrollbar: %s", prefill)
 	c.check(gutterOf(prefill) == 0, "the fitted settings window keeps no scrollbar gutter: %s", prefill)
 	c.check(gapOf(prefill) <= 32, "no dead band above the settings buttons: %s", prefill)
