@@ -113,6 +113,32 @@ func (s State) ActiveNode() (Node, error) {
 	return s.Nodes[s.Active], nil
 }
 
+// RemoveNode deletes one row and keeps the selection pointing at the same node
+// it was pointing at, which is the only promise a user makes when they delete an
+// entry they are not using. Active is an index, so the rows after the removed one
+// all move up: without this, deleting the first of three nodes while using the
+// third silently starts carrying traffic through the second, and the only sign is
+// a different latency number.
+//
+// Deleting the node in use has no answer that keeps the promise, so it falls to
+// the row that slid into its place - the next one, or the last when it was last.
+func (s *State) RemoveNode(index int) error {
+	if index < 0 || index >= len(s.Nodes) {
+		return fmt.Errorf("invalid index: %d", index)
+	}
+	s.Nodes = append(s.Nodes[:index:index], s.Nodes[index+1:]...)
+	switch {
+	case index < s.Active:
+		s.Active--
+	case index == s.Active:
+		if s.Active >= len(s.Nodes) {
+			s.Active = len(s.Nodes) - 1
+		}
+	}
+	s.Normalize()
+	return nil
+}
+
 // XHTTPMode folds a configured request shape onto one of the four names the
 // transport speaks. Unset is stream-one: that is the shape every node saved
 // before this field existed already used, and the one long POST request that
@@ -250,7 +276,16 @@ func (st *Store) Load() (State, error) {
 	s := DefaultState()
 	b, err := os.ReadFile(st.path)
 	if err != nil {
-		return s, nil
+		// Two different answers hide in this one error, and only one of them is
+		// innocent. There is no file, so this is a first run. There is a file and
+		// this process was not allowed to look at it - an antivirus or a sync
+		// client holding it, a folder that went read-only - and answering "no
+		// state" to that tells the app it is on its first run, which lets the next
+		// click save an empty node list over the file it could not read.
+		if errors.Is(err, os.ErrNotExist) {
+			return s, nil
+		}
+		return DefaultState(), fmt.Errorf("the saved state at %s could not be read: %w", st.path, err)
 	}
 	if err := json.Unmarshal(b, &s); err != nil {
 		return DefaultState(), st.quarantine(err)
