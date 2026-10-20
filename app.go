@@ -287,13 +287,17 @@ func (a *App) shutdown() {
 	}
 }
 
-// GetPlatformInfo returns platform-specific capabilities.
+// GetPlatformInfo returns the platform capabilities the frontend builds its
+// windows from. The keys are the names settings.js and app.js read, and
+// platforminfo_test.go fails if they stop matching: a key the frontend cannot
+// see reads as false, which is how the tray row and the System mode both
+// disappeared from the settings window without any error anywhere.
 func (a *App) GetPlatformInfo() map[string]bool {
 	return map[string]bool{
-		"startLoginSupported":           platform.StartAtLoginSupported,
-		"platform.TrayCanHide":          platform.TrayCanHide,
-		"platform.SystemProxySupported": platform.SystemProxySupported,
-		"nativeContextMenu":             platform.NativeContextMenuSupported,
+		"startLoginSupported":  platform.StartAtLoginSupported,
+		"trayCanHide":          platform.TrayCanHide,
+		"systemProxySupported": platform.SystemProxySupported,
+		"nativeContextMenu":    platform.NativeContextMenuSupported,
 	}
 }
 
