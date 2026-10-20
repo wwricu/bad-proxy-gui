@@ -20,14 +20,18 @@ const windowTitle = "Bad Proxy GUI"
 const mainWindowName = "main"
 
 // The main window is sized by its own content now that the forms have moved
-// out: the status bar, whose fixed parts - two actions and four readouts holding
-// their longest words - need 483 px of *client* width, leaving the rest for the
-// message line. That number is what the self-test measured on this machine, and
-// text does not scale evenly, so a display at another scaling can ask for a few
-// pixels more. The floor is it plus the frame, which is 13 px wide at 175% and
-// 16 at 100%, plus that margin. Setting the floor by the thinner frame instead
-// leaves a machine at 100% with the facts hanging over the edge, which is what
-// the width checks look for.
+// out. The status bar's fixed parts - two actions and four readouts holding
+// their longest words - ask for 455 px of client width; whatever the page has
+// left of that is the message line. The window is wider than the bar because
+// the frame is charged first, and the frame is not the same at every display
+// scale: this machine at 175% hands the page 475 px of a 488 px window, so the
+// line has 20 px to say something in, and a runner at 100% takes more frame out
+// of the same 488 and leaves the line less.
+//
+// Neither number is taken on trust. The self-test sizes a real window to the
+// floor and reads back both what the bar demands and what the page was given,
+// because the last time this arithmetic was written down by hand it went stale
+// and the floor sat 2 px narrower than the bar for a whole release.
 //
 // The height floor is mainWindowMinRows node rows plus the bar: a list shorter
 // than that is unusable to click in, whatever it costs an empty list in bare
@@ -103,7 +107,9 @@ func main() {
 		OnShutdown: app.shutdown,
 	})
 
-	nodeCount := len(app.st.Nodes)
+	// snapshot, not app.st: the state belongs to mu, and reading it here should
+	// not depend on no binding goroutine existing yet.
+	nodeCount := len(app.snapshot().Nodes)
 	w, h, minW, minH := mainWindowSize(nodeCount)
 	win := wails.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:      mainWindowName,
