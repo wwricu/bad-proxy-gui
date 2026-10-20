@@ -22,6 +22,7 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/events"
 	"github.com/wwricu/bad-proxy-gui/internal/config"
 	"github.com/wwricu/bad-proxy-gui/internal/platform"
+	"github.com/wwricu/bad-proxy-gui/internal/rules"
 )
 
 // Drives the app the way the buttons do, checks what each page actually
@@ -685,7 +686,7 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 	dataDir, dirErr := config.UserDir()
 	c.check(dirErr == nil, "the updater's own data dir is findable: %v", dirErr)
 	if dirErr == nil {
-		recorded := rulesDay(storedRulesDate(dataDir))
+		recorded := rules.StoredDate(dataDir)
 		c.check(recorded != "" && strings.Contains(first, recorded),
 			"the build the app recorded is the one it reported: %q said %q", recorded, first)
 		second, secondLines := clickUpdater(settings, probes, time.Minute)

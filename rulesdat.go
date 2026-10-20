@@ -2,11 +2,10 @@ package main
 
 import (
 	_ "embed"
-	"os"
-	"path/filepath"
 
 	"github.com/wwricu/bad-proxy-gui/internal/config"
 	"github.com/wwricu/bad-proxy-gui/internal/platform"
+	"github.com/wwricu/bad-proxy-gui/internal/rules"
 )
 
 // rulesDat is the compiled domain-list-community rule file shipped inside the
@@ -33,8 +32,8 @@ func ensureRulesDat() string {
 	if err != nil {
 		return ""
 	}
-	path := filepath.Join(dir, "rules.dat")
-	if fileExists(path) {
+	path := rules.Path(dir)
+	if rules.Installed(dir) {
 		return path
 	}
 	if bundle := platform.BundleRulesPath(); bundle != "" {
@@ -48,9 +47,4 @@ func ensureRulesDat() string {
 		return ""
 	}
 	return path
-}
-
-func fileExists(path string) bool {
-	st, err := os.Stat(path)
-	return err == nil && !st.IsDir()
 }
