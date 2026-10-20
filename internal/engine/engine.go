@@ -263,7 +263,8 @@ const testURL = "http://www.gstatic.com/generate_204"
 const httpTestURL = "http://detectportal.firefox.com/canonical.html"
 
 // proxyClient routes a request through the local http inbound on the given port,
-// independent of the OS system proxy.
+// independent of the OS system proxy. It is a one-shot client: the caller is
+// done with it after the answer and closes its idle connections.
 func proxyClient(httpPort string) *http.Client {
 	proxyURL, err := url.Parse("http://127.0.0.1:" + httpPort)
 	if err != nil {
@@ -285,6 +286,9 @@ func DialThroughProxy(s config.State) (time.Duration, error) {
 	if client == nil {
 		return 0, errors.New("bad http port")
 	}
+	// The transport holds the connection it used, waiting for a request that a
+	// one-shot client will never make.
+	defer client.CloseIdleConnections()
 
 	start := time.Now()
 	resp, err := client.Get(testURL)
@@ -307,6 +311,7 @@ func DialHTTPThroughProxy(s config.State) (time.Duration, error) {
 	if client == nil {
 		return 0, errors.New("bad http port")
 	}
+	defer client.CloseIdleConnections()
 
 	start := time.Now()
 	resp, err := client.Get(httpTestURL)
