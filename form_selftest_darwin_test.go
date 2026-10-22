@@ -351,6 +351,26 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 	c.check(gapOf(prefill) <= 32, "no dead band above the settings buttons: %s", prefill)
 	c.check(belowOf(prefill) >= 0 && belowOf(prefill) <= 12,
 		"the settings buttons sit at the bottom edge: %s", prefill)
+	var row struct {
+		Updater struct {
+			Same     bool `json:"same"`
+			First    bool `json:"first"`
+			LeftGap  int  `json:"leftGap"`
+			RightGap int  `json:"rightGap"`
+			Beside   bool `json:"beside"`
+			Clear    int  `json:"clear"`
+		} `json:"updater"`
+	}
+	c.check(json.Unmarshal([]byte(prefill), &row) == nil,
+		"the settings page reports its button row: %s", prefill)
+	c.check(row.Updater.Same && row.Updater.First,
+		"the rules updater shares the button row, ahead of Cancel: %s", prefill)
+	c.check(row.Updater.LeftGap == row.Updater.RightGap && row.Updater.LeftGap > 0,
+		"the updater holds the row's left edge as firmly as OK holds the right: %d and %d",
+		row.Updater.LeftGap, row.Updater.RightGap)
+	c.check(row.Updater.Beside && row.Updater.Clear > 0,
+		"the updater's message sits to its right and stops short of Cancel: %d px clear",
+		row.Updater.Clear)
 	sw, sh := settings.Size()
 	fmt.Printf("  form   settings: window=%dx%d %s\n", sw, sh, prefill)
 	time.Sleep(1200 * time.Millisecond)
@@ -419,6 +439,34 @@ const settingsGeometry = `
 		const body = document.querySelector(".sheet-body");
 		const last = Math.max(...[...document.querySelectorAll(".sheet-body *")]
 			.map((el) => el.getBoundingClientRect().bottom).filter((y) => y > 0));
+		// The updater belongs to the window, so it shares the button row instead of
+		// costing the form a line of its own. Its message is measured with the
+		// longest thing the updater can say - the case where the row could overflow
+		// - and empty until this probe fills it, since a runner has never replaced
+		// its bundled dataset. The text goes back out so the fit numbers around it
+		// stay the ones the window was sized for.
+		const updater = (() => {
+			const b = document.getElementById("sUpdateRules");
+			const m = document.getElementById("sRulesMsg");
+			const had = m.textContent;
+			m.textContent = "download was only 512 bytes, too small to be the " +
+				"rules dataset - keeping the current one";
+			const rr = document.querySelector(".sheet-actions").getBoundingClientRect();
+			const br = b.getBoundingClientRect();
+			const cr = document.getElementById("settingsCancel").getBoundingClientRect();
+			const mr = m.getBoundingClientRect();
+			const out = {same: b.parentElement.parentElement === document.querySelector(".sheet-actions"),
+				first: br.right < cr.left,
+				leftGap: Math.round(br.left - rr.left),
+				rightGap: Math.round(rr.right - document.getElementById("settingsOK").getBoundingClientRect().right),
+				beside: mr.width > 0 && mr.left >= br.right,
+				clear: Math.round(cr.left - mr.right)};
+			m.textContent = had;
+			return out;
+		})();
+		// The line the window opens with is read too, but only as far as the row
+		// it costs: a runner has never replaced its bundled dataset, so the slot
+		// is empty here and the updater's own text is what gets measured.
 		return {
 			ports: ["sHttpPort","sSocksPort"].map(id => document.getElementById(id).value).join("/"),
 			loginRow: getComputedStyle(document.getElementById("sLoginRow")).display,
@@ -427,6 +475,7 @@ const settingsGeometry = `
 			gap: Math.round(document.querySelector(".sheet-actions").getBoundingClientRect().top - last),
 			below: Math.round(window.innerHeight -
 				document.querySelector(".sheet-actions").getBoundingClientRect().bottom),
+			updater,
 			inner: [window.innerWidth, window.innerHeight],
 			fit: window.selffit};
 	})()`
