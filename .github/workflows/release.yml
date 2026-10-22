@@ -93,8 +93,8 @@ jobs:
             <key>CFBundleIconFile</key><string>AppIcon</string>
             <key>CFBundleIdentifier</key><string>icu.wwr.badproxy.gui</string>
             <key>CFBundlePackageType</key><string>APPL</string>
-            <key>CFBundleVersion</key><string>0.0.1-beta-7</string>
-            <key>CFBundleShortVersionString</key><string>0.0.1-beta-7</string>
+            <key>CFBundleVersion</key><string>0.0.1-beta-8</string>
+            <key>CFBundleShortVersionString</key><string>0.0.1-beta-8</string>
             <key>LSMinimumSystemVersion</key><string>11.0</string>
             <key>NSHighResolutionCapable</key><true/>
             <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
