@@ -59,3 +59,23 @@ void *badproxyCreateStatusItem(const unsigned char *imgData, int imgLen) {
 		return (void *)statusItem;
 	}
 }
+
+// badproxySetStatusItemVisible shows or hides the menu-bar item. The item is
+// kept rather than released: this is the same object coming back, with its
+// image, its tooltip and its click target still attached. With no item at all it
+// says nothing, so a setting that was already off before the app ever made one
+// is not a reason to make one.
+void badproxySetStatusItemVisible(int visible) {
+	if (statusItem != nil) {
+		[statusItem setVisible:(visible ? YES : NO)];
+	}
+}
+
+// badproxyStatusItemVisible is the item's own answer - 1 shown, 0 hidden, -1 no
+// item - which is what the macOS self-test reads back after a settings draft.
+int badproxyStatusItemVisible(void) {
+	if (statusItem == nil) {
+		return -1;
+	}
+	return [statusItem isVisible] ? 1 : 0;
+}

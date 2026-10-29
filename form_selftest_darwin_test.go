@@ -127,6 +127,11 @@ func runFormSelfTest() int {
 		MinHeight: minH,
 		URL:       "/?selftest=1",
 	})
+	// The menu-bar item the shipped app makes for itself, made here the same way
+	// and at the same moment - before the run loop, on the main thread, which is
+	// the only thread AppKit will take it on. The settings window is then tested
+	// against the item it has to show and hide, not just the file it writes.
+	setupTray(a)
 
 	probes := make(chan map[string]any, 256)
 	wails.Event.On("selftest", func(e *application.CustomEvent) {
@@ -359,6 +364,10 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 		"the settings form filled itself from the draft: %s", prefill)
 	c.check(strings.Contains(prefill, `"loginRow":"flex"`),
 		"the start-at-login row is offered on macOS: %s", prefill)
+	c.check(strings.Contains(prefill, `"trayRow":"flex"`),
+		"the hide-tray row is offered on macOS: %s", prefill)
+	c.check(strings.Contains(prefill, `"trayLabel":"Hide menu-bar icon"`),
+		"the row calls it the menu bar here: %s", prefill)
 	c.check(strings.Contains(prefill, `"scroll":false`),
 		"the settings form needs no scrollbar: %s", prefill)
 	c.check(gapOf(prefill) <= 32, "no dead band above the settings buttons: %s", prefill)
@@ -390,6 +399,51 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 	c.shot("settings")
 	probe(settings, probes, `(() => { document.getElementById("settingsCancel").click(); return "sent"; })()`)
 	c.check(waitClosed(a, settingsWindowName, 10*time.Second), "Cancel closes the settings window")
+
+	// ---- the menu-bar switch, live ----
+	// HideTray used to be read once, at launch - and on macOS not even then,
+	// because the item was simply always there. It now follows the draft while the
+	// app runs, and the answer that matters is AppKit's own: what the item thinks
+	// it is showing, read back from the status item itself.
+	c.check(a.trayOn.Load() && nativeTrayVisible() == 1,
+		"the app started with its menu-bar item shown: item=%d trayOn=%v",
+		nativeTrayVisible(), a.trayOn.Load())
+
+	// One pass: the gear, the box set to what the draft should say, OK, and - if
+	// the window is still open when it should have closed - the refusal in it.
+	// The draft arrives by binding, so the ports are waited for first: OK on a
+	// window that has only just appeared would otherwise send the empty page.
+	trayDraft := func(hide bool) string {
+		probe(win, probes, `(() => { document.getElementById("gearBtn").click(); return "sent"; })()`)
+		w := waitForm(a, settingsWindowName, 10*time.Second)
+		if w == nil {
+			return ": the gear did not open the settings window"
+		}
+		probeUntil(w, probes, `document.getElementById("sHttpPort").value`,
+			func(s string) bool { return s != "" }, 10*time.Second)
+		probe(w, probes, `(() => {
+			document.getElementById("sTray").checked = `+fmt.Sprintf("%v", hide)+`;
+			document.getElementById("settingsOK").click();
+			return "sent";
+		})()`)
+		if waitClosed(a, settingsWindowName, 15*time.Second) {
+			return ""
+		}
+		return ": " + probe(w, probes, `document.getElementById("sMsg").textContent`)
+	}
+	refused := trayDraft(true)
+	c.check(refused == "" && stateFromFile(dir).HideTray && nativeTrayVisible() == 0,
+		"OK took the menu-bar item away without a restart: item=%d%s",
+		nativeTrayVisible(), refused)
+	refused = trayDraft(false)
+	c.check(refused == "" && !stateFromFile(dir).HideTray && nativeTrayVisible() == 1,
+		"OK put the menu-bar item back without a restart: item=%d%s",
+		nativeTrayVisible(), refused)
+	// What macOS keeps unlike Windows: a close is still a hide with the item
+	// away, because launching the app again is what brings the window back
+	// (SingleInstance), and that route does not need a glyph on the bar.
+	c.check(a.trayOn.Load(),
+		"hiding the item leaves a close still a hide: trayOn=%v", a.trayOn.Load())
 
 	// ---- hide and reopen with a form still open ----
 	// An owned window is not hidden along with its owner, so the app takes it
@@ -483,6 +537,11 @@ const settingsGeometry = `
 		return {
 			ports: ["sHttpPort","sSocksPort"].map(id => document.getElementById(id).value).join("/"),
 			loginRow: getComputedStyle(document.getElementById("sLoginRow")).display,
+			// Which rows the OS offers, and what this OS calls the thing. Both come
+			// from a binding, and a key that stops being answered reads as false:
+			// the row disappears and says nothing while it does.
+			trayRow: getComputedStyle(document.getElementById("sTrayRow")).display,
+			trayLabel: document.querySelector("#sTrayRow label").textContent,
 			scroll: body.scrollHeight > body.clientHeight,
 			gutter: body.offsetWidth - body.clientWidth,
 			gap: Math.round(document.querySelector(".sheet-actions").getBoundingClientRect().top - last),

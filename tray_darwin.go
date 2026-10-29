@@ -1,7 +1,7 @@
 //go:build darwin
 
 // The menu-bar item is AppKit's own NSStatusItem, not Wails' SystemTray. Only
-// the former appears in System Settings, which is where the user turns a
+// the former appears in System Settings, which is where the user can turn a
 // menu-bar item off; the Wails one is invisible to it. tray_windows.go, which
 // uses Wails, is the other platform's version.
 //
@@ -14,6 +14,8 @@ package main
 #cgo LDFLAGS: -framework Cocoa
 
 void* badproxyCreateStatusItem(const unsigned char* imgData, int imgLen);
+void badproxySetStatusItemVisible(int visible);
+int badproxyStatusItemVisible(void);
 */
 import "C"
 
@@ -51,18 +53,62 @@ func createNativeTray(imgData []byte) bool {
 		C.int(len(imgData))) != nil
 }
 
-// setupTray is the darwin counterpart of the one in tray_windows.go. The second
-// parameter is ignored - it exists only to match that signature at the call
-// site in main.go.
+// setupTray puts the menu-bar item in place unless the saved setting has it
+// away.
 //
-// There is no HideTray check here: the menu-bar item is the only reopen
-// affordance once the window is closed and the Dock icon is dropped, so it
-// cannot be hidden. The user turns it off in System Settings instead.
-func setupTray(a *App, _ interface{}) {
+// trayOn is true either way. It says that closing the window hides it rather
+// than ends the app, and here that is what happens with or without a glyph on
+// the bar: what brings the window back is launching the app again, which
+// SingleInstance hands to the instance that is already running. The item is a
+// shortcut to that, not the only route, so hiding it strands nothing.
+func setupTray(a *App) {
+	a.trayOn.Store(true)
+	if a.snapshot().HideTray {
+		return
+	}
+	createTray(a)
+}
+
+// createTray asks for the item. AppKit keeps one per app, so this is also the
+// way back when the setting is turned off again mid-run: an item that is already
+// there comes back rather than stacking a second one.
+func createTray(a *App) {
 	trayClick = a.showWindow
 	if !createNativeTray(trayTemplateBytes) {
 		trayClick = nil
+	}
+}
+
+// applyTrayVisibility follows a HideTray draft the settings window has just
+// saved.
+//
+// The status item belongs to AppKit, so the work is done on the main thread and
+// this waits for it: the binding that got here is holding "Applying..." for the
+// user anyway, and returning before the item had moved would report a change
+// that had not happened yet.
+func applyTrayVisibility(a *App, hide bool) {
+	platform.RunOnMainThread(func() {
+		if !hide {
+			createTray(a)
+		}
+		setNativeTrayVisible(!hide)
+	})
+}
+
+// setNativeTrayVisible shows or hides the item, and says nothing when there is
+// no item to show. Call it on the main thread.
+func setNativeTrayVisible(visible bool) {
+	if visible {
+		C.badproxySetStatusItemVisible(1)
 		return
 	}
-	a.trayOn = true
+	C.badproxySetStatusItemVisible(0)
+}
+
+// nativeTrayVisible is the item's own answer - 1 shown, 0 hidden, -1 when there
+// has never been one - read on the main thread because that is where it lives.
+func nativeTrayVisible() int {
+	var seen int
+	platform.RunOnMainThread(func() { seen = int(C.badproxyStatusItemVisible()) })
+	return seen
 }

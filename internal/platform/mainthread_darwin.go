@@ -35,10 +35,10 @@ func badproxyMainTask() {
 	}
 }
 
-// runOnMainThread runs fn on the main thread and waits for it to finish.
+// RunOnMainThread runs fn on the main thread and waits for it to finish.
 // Already on that thread, it runs inline: queueing and then waiting on the very
 // loop we are standing in would deadlock.
-func runOnMainThread(fn func()) {
+func RunOnMainThread(fn func()) {
 	if C.badproxyIsMainThread() == 1 {
 		fn()
 		return

@@ -67,7 +67,7 @@ type State struct {
 	Active      int    `json:"active"` // index into Nodes; -1 = none
 	ProxyMode   string `json:"proxy_mode"`
 	RoutingMode string `json:"routing_mode"`
-	HideTray    bool   `json:"hide_tray"`   // hide the tray / menu-bar icon (applies on restart)
+	HideTray    bool   `json:"hide_tray"`   // take the tray / menu-bar item away, as soon as it is saved
 	AllowLAN    bool   `json:"allow_lan"`   // bind the inbounds on 0.0.0.0 so other devices can use them
 	StartLogin  bool   `json:"start_login"` // register the app to launch at login
 }

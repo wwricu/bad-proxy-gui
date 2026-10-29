@@ -167,6 +167,10 @@ func runFormSelfTest() int {
 		// menu otherwise hides.
 		URL: "/?selftest=1",
 	})
+	// The tray the shipped app makes for itself, made here the same way and at
+	// the same moment: the settings window is tested against the icon it has to
+	// show and hide, and without this it would only ever have the file.
+	setupTray(a)
 
 	probes := make(chan map[string]any, 256)
 	wails.Event.On("selftest", func(e *application.CustomEvent) {
@@ -573,6 +577,10 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 			// that way, so both are read back here.
 			modeOpts: [...document.getElementById("sMode").options].map(o => o.value).join(","),
 			trayRow: getComputedStyle(document.getElementById("sTrayRow")).display,
+			// The row's own words: the same item is the tray here and the menu bar
+			// on macOS, and the platform answer that picks the wording is a binding
+			// like the one above.
+			trayLabel: document.querySelector("#sTrayRow label").textContent,
 			loginRow: getComputedStyle(document.getElementById("sLoginRow")).display,
 			scroll: document.querySelector(".sheet-body").scrollHeight >
 			        document.querySelector(".sheet-body").clientHeight,
@@ -670,6 +678,8 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 	c.check(strings.Contains(prefill, `"loginRow":"flex"`), "the start-at-login row is offered on Windows")
 	c.check(strings.Contains(prefill, `"trayRow":"flex"`),
 		"the hide-tray row is offered on Windows: %s", prefill)
+	c.check(strings.Contains(prefill, `"trayLabel":"Hide tray icon"`),
+		"the row calls it the tray on Windows: %s", prefill)
 	c.check(strings.Contains(prefill, `"modeOpts":"direct,proxy,system"`),
 		"the mode dropdown still offers the system proxy: %s", prefill)
 	c.check(strings.Contains(prefill, `"scroll":false`), "the settings form needs no scrollbar: %s", prefill)
@@ -741,6 +751,56 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 	after := probeUntil(win, probes, `document.getElementById("roHttp").textContent`,
 		func(s string) bool { return s == "11911" }, 8*time.Second)
 	c.check(after == "11911", "the bar followed the applied setting: %q", after)
+
+	// ---- the tray switch, live ----
+	// HideTray used to be read once, at launch: OK wrote the file and left the
+	// icon on the bar - and the close guard that decides whether closing hides or
+	// quits - answering to whatever the app happened to start with until the next
+	// start. trayOn is the one thing both of them read, so it is what has to move
+	// with the file, in both directions.
+	//
+	// What is asserted is the app agreeing with its own setting while it runs.
+	// Whether the pixels left the notification area is Shell_NotifyIcon's answer,
+	// and on a machine that keeps new icons in the overflow panel no screenshot of
+	// the bar can see it either way.
+	c.check(a.trayOn.Load() && trayIcon != nil,
+		"the app started with its tray icon up: trayOn=%v", a.trayOn.Load())
+
+	// One pass: the gear, the box set to what the draft should say, OK, and - if
+	// the window is still open when it should have closed - the refusal in it.
+	//
+	// The draft arrives by binding, so clicking OK on a window that has only just
+	// appeared would send the empty ports the page starts with; waiting for one to
+	// be filled is waiting for the whole draft to have landed.
+	trayDraft := func(hide bool) string {
+		probe(win, probes, `(() => { document.getElementById("gearBtn").click(); return "sent"; })()`)
+		w := waitForm(a, settingsWindowName, 5*time.Second)
+		if w == nil {
+			return ": the gear did not open the settings window"
+		}
+		probeUntil(w, probes, `document.getElementById("sHttpPort").value`,
+			func(s string) bool { return s != "" }, 10*time.Second)
+		probe(w, probes, `(() => {
+			document.getElementById("sTray").checked = `+fmt.Sprintf("%v", hide)+`;
+			document.getElementById("settingsOK").click();
+			return "sent";
+		})()`)
+		if waitClosed(a, settingsWindowName, 15*time.Second) {
+			return ""
+		}
+		return ": " + probe(w, probes, `document.getElementById("sMsg").textContent`)
+	}
+	refused := trayDraft(true)
+	c.check(refused == "" && stateFromFile(dir).HideTray && !a.trayOn.Load(),
+		"OK hid the tray without a restart: file=%v trayOn=%v%s",
+		stateFromFile(dir).HideTray, a.trayOn.Load(), refused)
+
+	// Putting it back is the half no launch can do, and the half that has to find
+	// the icon again rather than assume there is one.
+	refused = trayDraft(false)
+	c.check(refused == "" && !stateFromFile(dir).HideTray && a.trayOn.Load(),
+		"OK brought the tray back without a restart: file=%v trayOn=%v%s",
+		stateFromFile(dir).HideTray, a.trayOn.Load(), refused)
 
 	// Two clicks on the same action leave one window, not two writers of the
 	// same draft stacked on top of each other.

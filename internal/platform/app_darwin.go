@@ -53,12 +53,12 @@ import "unsafe"
 // Wails' lifecycle hooks, neither of which runs there.
 func BecomeForeground(title string) {
 	ct := C.CString(title)
-	runOnMainThread(func() {
+	RunOnMainThread(func() {
 		defer C.free(unsafe.Pointer(ct))
 		C.showMainWindow(ct)
 	})
 }
 
 func BecomeBackground() {
-	runOnMainThread(func() { C.BecomeBackground() })
+	RunOnMainThread(func() { C.BecomeBackground() })
 }

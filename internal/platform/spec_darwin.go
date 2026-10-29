@@ -2,11 +2,19 @@
 
 package platform
 
-// TrayCanHide is false on macOS: the menu-bar item is the only reopen
-// affordance once the window is closed and the Dock icon is dropped, so the
-// settings window hides the toggle rather than offering a control that cannot
-// take effect.
-const TrayCanHide = false
+// TrayCanHide is true here too: the menu-bar item may be turned off. It used to
+// be the only way back into a hidden window, which is why the toggle was not
+// offered at all, but launching the app again reaches the instance that is
+// already running (SingleInstance) and shows its window - with or without a
+// glyph on the bar.
+//
+// Hiding it does not change what closing the window does: the app still hides
+// rather than quits, because that relaunch is what brings it back.
+const TrayCanHide = true
+
+// TrayIsMenuBar names the item the way this platform does, so the settings
+// window can say "menu bar" here and "tray" on Windows.
+const TrayIsMenuBar = true
 
 // WindowFrameHeight is 0 on macOS: Wails hands the window's Height straight to
 // -[NSWindow initWithContentRect:...], so the number is already the webview's

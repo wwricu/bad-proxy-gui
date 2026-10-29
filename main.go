@@ -130,13 +130,13 @@ func main() {
 
 	app.wails = wails
 	app.mainWindow = win
-	setupTray(app, wails)
+	setupTray(app)
 
 	// A close is a hide while the tray is there to bring the window back. The
 	// hook runs before Wails destroys anything, so Cancel() has to be the one
 	// that says no.
 	win.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
-		if app.trayOn && !app.quitting.Load() {
+		if app.trayOn.Load() && !app.quitting.Load() {
 			e.Cancel()
 			app.hideToTray()
 		}

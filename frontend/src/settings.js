@@ -33,6 +33,10 @@ async function init() {
     document.getElementById('sLoginRow').style.display = platform.startLoginSupported ? 'flex' : 'none';
     document.getElementById('sTrayRow').style.display = platform.trayCanHide ? 'flex' : 'none';
     document.getElementById('sTray').checked = !!draft.hide_tray;
+    // The one item Windows calls the tray is what macOS calls the menu bar, and
+    // the row should name it the way the person reading it does.
+    document.querySelector('#sTrayRow label').textContent =
+        platform.trayIsMenuBar ? 'Hide menu-bar icon' : 'Hide tray icon';
     // System-proxy mode only exists where the OS proxy can actually be set.
     if (!platform.systemProxySupported) {
         document.querySelector('#sMode option[value="system"]').remove();

@@ -28,8 +28,8 @@ type App struct {
 	st         config.State
 	store      *config.Store
 	mu         sync.Mutex // guards st
-	trayOn     bool       // written by setupTray, before the run loop starts any goroutine
 	quitting   atomic.Bool
+	trayOn     atomic.Bool // a close hides the window rather than ending the app; the tray files say what this platform's answer is
 }
 
 // newApp loads the saved state. It runs before the window exists: the state
@@ -293,6 +293,7 @@ func (a *App) GetPlatformInfo() map[string]bool {
 	return map[string]bool{
 		"startLoginSupported":  platform.StartAtLoginSupported,
 		"trayCanHide":          platform.TrayCanHide,
+		"trayIsMenuBar":        platform.TrayIsMenuBar,
 		"systemProxySupported": platform.SystemProxySupported,
 		"nativeContextMenu":    platform.NativeContextMenuSupported,
 	}

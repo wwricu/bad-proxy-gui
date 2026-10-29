@@ -7,6 +7,10 @@ package platform
 // invisibly.
 const TrayCanHide = true
 
+// TrayIsMenuBar is false here: the item sits in the notification area, and the
+// settings window says "tray" rather than the macOS word for it.
+const TrayIsMenuBar = false
+
 // WindowFrameHeight is what the caption and border cost: Wails' window Height
 // is the whole window here, so a form's client height is this much less than
 // the number handed to it. Measured in the self-test run, which also charges

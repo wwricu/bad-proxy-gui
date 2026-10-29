@@ -78,6 +78,14 @@ func (a *App) ApplySettings(s config.Settings) error {
 		}
 	}
 
+	// The tray is the one setting here owned by this app rather than by the OS,
+	// so a saved change goes to the running process: the item on the bar and the
+	// close guard both read it, and a restart merely lets the file disagree with
+	// both until then.
+	if next.HideTray != prev.HideTray {
+		applyTrayVisibility(a, next.HideTray)
+	}
+
 	if next.StartLogin != prev.StartLogin {
 		if err := platform.SetStartAtLogin(next.StartLogin); err != nil {
 			problems = append(problems, fmt.Errorf("start at login: %w", err))
