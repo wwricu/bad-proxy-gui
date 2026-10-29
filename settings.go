@@ -83,7 +83,7 @@ func (a *App) ApplySettings(s config.Settings) error {
 	// close guard both read it, and a restart merely lets the file disagree with
 	// both until then.
 	if next.HideTray != prev.HideTray {
-		// applyTrayVisibility(a, next.HideTray)
+		applyTrayVisibility(a, next.HideTray)
 	}
 
 	if next.StartLogin != prev.StartLogin {
