@@ -3,13 +3,11 @@
 package platform
 
 // TrayCanHide is true here too: the menu-bar item may be turned off. It used to
-// be the only way back into a hidden window, which is why the toggle was not
-// offered at all, but launching the app again reaches the instance that is
-// already running (SingleInstance) and shows its window - with or without a
-// glyph on the bar.
-//
-// Hiding it does not change what closing the window does: the app still hides
-// rather than quits, because that relaunch is what brings it back.
+// be the only way back into a hidden window, which is why no toggle was offered
+// at all - but launching the app again reaches the instance that is already
+// running (SingleInstance) and shows its window, with or without a glyph on the
+// bar. So closing the window is safe either way: it stays a hide here, where
+// Windows turns it into a quit because its icon was the only way back.
 const TrayCanHide = true
 
 // TrayIsMenuBar names the item the way this platform does, so the settings
