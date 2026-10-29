@@ -55,6 +55,7 @@ func TestNormalizeMigratesPlaintextTransport(t *testing.T) {
 		{"nonsense", "tls"},
 		{"tls", "tls"},
 		{"xhttp", "xhttp"},
+		{"http2", "http2"},
 	}
 	for _, tc := range cases {
 		s := State{Nodes: []Node{{Name: "a", Transport: tc.in}}, Active: 0}

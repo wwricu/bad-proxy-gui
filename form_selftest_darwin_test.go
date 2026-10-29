@@ -296,6 +296,19 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 	time.Sleep(1200 * time.Millisecond)
 	c.shot("node-tls")
 
+	// http2 keeps the path and Host but has no request shape, so its form sits
+	// between the other two: one row fewer than xhttp, one row more than tls.
+	probe(node, probes, `(() => { const s = document.getElementById("fTransport"); s.value = "http2"; s.dispatchEvent(new Event("change")); return "sent"; })()`)
+	h2form := probeUntil(node, probes, formGeometry, func(s string) bool {
+		return strings.Contains(s, `"n":3`) && settled(s) && loopDone(s)
+	}, 15*time.Second)
+	c.check(strings.Contains(h2form, `"fSecret","fAuthority","fPath"`),
+		"http2 drops only the request shape: %s", h2form)
+	c.check(heightOf(h2form) > heightOf(shrunk) && heightOf(h2form) < heightOf(fields),
+		"the http2 form is sized between tls and xhttp: %s", h2form)
+	time.Sleep(1200 * time.Millisecond)
+	c.shot("node-http2")
+
 	// Growing back is the same promise in the other direction.
 	probe(node, probes, `(() => { const s = document.getElementById("fTransport"); s.value = "xhttp"; s.dispatchEvent(new Event("change")); return "sent"; })()`)
 	grown := probeUntil(node, probes, formGeometry, func(s string) bool {

@@ -17,7 +17,7 @@ import (
 // node is active at a time and becomes the default (empty-tag) outbound.
 //
 // There is deliberately no plaintext field: the client always encrypts the hop
-// (tls transport, or xhttp over https) and verifies the certificate against the
+// (tls, or xhttp/http2 over tls) and verifies the certificate against the
 // system trust store. A node saved by an older build with "tls": false simply
 // loses that key, so it comes back encrypted.
 type Node struct {
@@ -27,7 +27,7 @@ type Node struct {
 	Port      string `json:"port"`
 	Secret    string `json:"secret"` // uuid / password; socks ignores it
 	Transport string `json:"transport"`
-	Path      string `json:"path"`      // xhttp request path
+	Path      string `json:"path"`      // xhttp/http2 request path
 	Authority string `json:"authority"` // SNI / Host, defaults to Server
 	Mode      string `json:"mode"`      // xhttp request shape: auto, stream-one, stream-up, packet-up
 }
@@ -154,13 +154,14 @@ func XHTTPMode(mode string) string {
 }
 
 // EncryptedTransport folds every transport value a node can carry onto one of
-// the two hops the client is willing to make: "tls" (TCP wrapped in TLS) or
-// "xhttp" over https. Raw tcp is cleartext, so it is not offered and any legacy
-// or blank value is migrated to tls, which reaches the same server the way
-// Xray's "tcp + security: tls" does.
+// the hops the client is willing to make: "tls" (TCP wrapped in TLS), "xhttp"
+// over https, or "http2" over https. Raw tcp is cleartext, so it is not offered
+// and any legacy or blank value is migrated to tls, which reaches the same
+// server the way Xray's "tcp + security: tls" does.
 func EncryptedTransport(transport string) string {
-	if transport == "xhttp" {
-		return "xhttp"
+	switch transport {
+	case "xhttp", "http2":
+		return transport
 	}
 	return "tls"
 }

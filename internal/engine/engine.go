@@ -243,8 +243,8 @@ func outbound(n config.Node, tag string) core.OutboundConfig {
 			Type:      config.EncryptedTransport(n.Transport),
 			Path:      n.Path,
 			Authority: n.Authority,
-			// Always on: the client makes no plaintext hop, so xhttp runs over
-			// https and there is no user-facing toggle to turn it off.
+			// Always on: the client makes no plaintext hop, so xhttp and http2
+			// run over tls and there is no user-facing toggle to turn it off.
 			Tls:  true,
 			Mode: n.Mode,
 		},

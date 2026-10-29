@@ -23,12 +23,13 @@ function setFormMsg(text) {
 //   - secret   used by btp/vless/trojan; the socks handshake ignores it.
 //   - tls      SNI (authority) only. TLS is implied by the transport itself.
 //   - xhttp    path, authority (Host), request shape (mode).
-// This is the only copy of the rule: the engine reads whatever fields the form
-// sends, and a second copy in Go would be a second place to be wrong.
+//   - http2    path, authority (Host). Xray's http transport has no request
+//              shape: every tunnel is one PUT.
 function visibleFields(protocol, transport) {
     const f = { secret: protocol !== 'socks', authority: false, path: false, mode: false };
     if (transport === 'tls') f.authority = true;
     if (transport === 'xhttp') { f.authority = true; f.path = true; f.mode = true; }
+    if (transport === 'http2') { f.authority = true; f.path = true; }
     return f;
 }
 

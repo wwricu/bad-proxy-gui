@@ -432,6 +432,18 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 		"the short form's buttons hold the bottom edge: %s", shrunk)
 	c.shot(node, "node-tls")
 
+	// http2 keeps the path and Host but has no request shape, so its form sits
+	// between the other two: one row fewer than xhttp, one row more than tls.
+	probe(node, probes, setTransport("http2"))
+	h2form := probeUntil(node, probes, formShape, func(s string) bool {
+		return strings.Contains(s, `"n":3`) && settled(s) && loopDone(s)
+	}, 8*time.Second)
+	c.check(strings.Contains(h2form, `"rows":["fSecret","fAuthority","fPath"]`),
+		"http2 drops only the request shape: %s", h2form)
+	c.check(heightOf(h2form) > heightOf(shrunk) && heightOf(h2form) < heightOf(fields),
+		"the http2 form is sized between tls and xhttp: %s", h2form)
+	c.shot(node, "node-http2")
+
 	// Growing back is the same promise in the other direction, and waiting for it
 	// here also settles the resize the socks pass started before the next probe.
 	probe(node, probes, setTransport("xhttp"))

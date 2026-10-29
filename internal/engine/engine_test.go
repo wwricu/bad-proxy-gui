@@ -171,7 +171,7 @@ func TestPickFreePortGivesUpOnAPortItCannotBind(t *testing.T) {
 // The always-TLS decision has to be visible in the outbound the engine dials,
 // because that is the hop the node sees.
 func TestOutboundAlwaysEncrypts(t *testing.T) {
-	for _, transport := range []string{"tcp", "tls", "xhttp", ""} {
+	for _, transport := range []string{"tcp", "tls", "xhttp", "http2", ""} {
 		n := config.Node{Name: "a", Protocol: "vless", Server: "example.com", Port: "443", Transport: transport}
 		tr := outbound(n, "").Transport
 		if !tr.Tls {
