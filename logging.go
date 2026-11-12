@@ -25,7 +25,12 @@ func logf(format string, args ...any) {
 	if err != nil {
 		return
 	}
-	f, err := os.OpenFile(filepath.Join(dir, "app.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	path := filepath.Join(dir, "app.log")
+	// One previous file is kept, so the pair cannot grow without bound.
+	if fi, err := os.Stat(path); err == nil && fi.Size() > 1<<20 {
+		_ = os.Rename(path, path+".1")
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return
 	}
