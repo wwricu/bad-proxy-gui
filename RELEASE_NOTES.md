@@ -5,8 +5,10 @@ with a domain routing list, driving one or more outbound nodes.
 
 ## Install
 
-* **Windows** — `bad-proxy-gui-windows-amd64.exe` installs, the `.zip` is the
-  same build unpacked and movable (it carries a `.portable` marker).
+* **Windows** — `bad-proxy-gui-windows-amd64.exe` is the app itself, not an
+  installer: run it from wherever you put it. The `.zip` is the same build with
+  a `.portable` marker, which keeps its data beside the exe instead of in your
+  user config directory.
 * **macOS 11 or newer** — `bad-proxy-gui-darwin-universal.zip` holds a universal
   (arm64 + x86_64) `.app`. It is ad-hoc signed and not notarised, so on first
   open either right-click → Open, or clear the flag up front:
