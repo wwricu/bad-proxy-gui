@@ -3,11 +3,13 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"image"
 	"image/png"
 	"io/fs"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -993,6 +995,36 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 	}
 
 	c.shot(win, "main-final")
+
+	// ---- a launch that never bound its ports ----
+	// The readouts are identical either way, so the bar is the only place this
+	// failure can be seen. Last, because a long status line moves the bar floor
+	// the geometry checks above measure.
+	a.eng.Stop()
+	squatter, err := net.Listen("tcp", "127.0.0.1:"+a.snapshot().HttpPort)
+	if err != nil {
+		c.fail("could not occupy the http port: %v", err)
+	} else {
+		_ = a.ServiceStartup(context.Background(), application.ServiceOptions{})
+		got := probeUntil(win, probes, `document.getElementById("statusText").textContent`,
+			func(s string) bool { return s == "Not running" }, 8*time.Second)
+		c.check(got == "Not running",
+			"the bar names a launch that never bound its ports: %q", got)
+		c.check(strings.Contains(probe(win, probes, `document.getElementById("statusText").title`),
+			"is in use"), "the reason rides the tooltip, not the line")
+		c.shot(win, "main-engine-failed")
+
+		_ = squatter.Close()
+		if err := a.eng.Restart(a.snapshot(), ensureRulesDat()); err != nil {
+			c.fail("the engine never came up once the port freed: %v", err)
+		}
+		win.EmitEvent("state-changed")
+		cleared := probeUntil(win, probes, `document.getElementById("statusText").textContent`,
+			func(s string) bool { return s == "" }, 8*time.Second)
+		c.check(cleared == "", "the bar clears once the engine is up: %q", cleared)
+		a.eng.Stop()
+	}
+
 	a.quit()
 }
 

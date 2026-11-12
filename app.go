@@ -28,6 +28,7 @@ type App struct {
 	st         config.State
 	store      *config.Store
 	mu         sync.Mutex // guards st
+	startErr   atomic.Value
 	quitting   atomic.Bool
 	trayOn     atomic.Bool // a close hides the window rather than ending the app; the tray files say what this platform's answer is
 }
@@ -96,6 +97,15 @@ func (a *App) ServiceStartup(context.Context, application.ServiceOptions) error 
 	// local inbounds answer immediately and mode switches are cheap restarts.
 	if err := a.eng.Start(st, ensureRulesDat()); err != nil {
 		logf("engine start failed: %v", err)
+		a.startErr.Store(err.Error())
+		// System mode leaves every browser pointed at a port nothing answers on.
+		if st.ProxyMode == config.ModeSystem {
+			if err := platform.ClearSystemProxy(a.store.Dir()); err != nil {
+				logf("system proxy left pointing at a stopped engine: %v", err)
+			}
+		}
+		// The page may already have loaded; its own first load covers that order.
+		a.mainWindow.EmitEvent("state-changed")
 		return nil
 	}
 	// Relaunching in system mode re-points the OS proxy at the (now-running)
@@ -139,6 +149,15 @@ func (a *App) hideToTray() {
 func (a *App) quit() {
 	a.quitting.Store(true)
 	a.wails.Quit()
+}
+
+// Reading the live engine means a restart that succeeds clears the bar by itself.
+func (a *App) EngineError() string {
+	if a.eng.Running() {
+		return ""
+	}
+	s, _ := a.startErr.Load().(string)
+	return s
 }
 
 // GetState returns the current GUI state to the frontend.
