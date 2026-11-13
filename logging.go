@@ -26,7 +26,6 @@ func logf(format string, args ...any) {
 		return
 	}
 	path := filepath.Join(dir, "app.log")
-	// One previous file is kept, so the pair cannot grow without bound.
 	if fi, err := os.Stat(path); err == nil && fi.Size() > 1<<20 {
 		_ = os.Rename(path, path+".1")
 	}

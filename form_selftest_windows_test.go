@@ -1010,8 +1010,6 @@ func checkForms(a *App, c *checker, probes chan map[string]any, dir string) {
 			func(s string) bool { return s == "Not running" }, 8*time.Second)
 		c.check(got == "Not running",
 			"the bar names a launch that never bound its ports: %q", got)
-		c.check(strings.Contains(probe(win, probes, `document.getElementById("statusText").title`),
-			"is in use"), "the reason rides the tooltip, not the line")
 		c.shot(win, "main-engine-failed")
 
 		_ = squatter.Close()

@@ -22,10 +22,7 @@ async function loadState() {
         platformInfo = await API().GetPlatformInfo();
     }
     render();
-    // The bar's slot is a few characters wide, so the reason rides the tooltip.
-    const why = await API().EngineError();
-    document.getElementById('statusText').title = why || '';
-    setStatus(why ? 'Not running' : '');
+    setStatus(await API().EngineError());
 }
 
 let statusTimer = 0;
